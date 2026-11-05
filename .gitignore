@@ -8,6 +8,9 @@ release/
 # 启动器 --empty-home 生成的临时目录
 _emptyhome/
 
+# Windows 文件权限修复的备份与报告
+.acl-recovery/
+
 # 临时文件
 *.log
 *.tmp
