@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      本页需要加载 tesseract 的 worker 与 WASM，都是本地文件（file://）。
+      所以 script-src / worker-src 必须放开 blob: 和 file: 之外的自身来源，
+      图片用 data: / blob: 展示。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' file: data: blob:;"
+    />
+    <title>图片取字</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="ob-head">
+        <span class="ob-title">图片取字</span>
+        <div class="ob-actions">
+          <label class="ob-btn" for="file">选择图片</label>
+          <input id="file" type="file" accept="image/*" hidden />
+          <button class="ob-btn" id="btn-paste" title="或直接按 Ctrl+V 粘贴">粘贴图片</button>
+          <button class="ob-btn primary" id="btn-run" disabled>识别</button>
+          <button class="ob-btn" id="btn-copy" disabled>复制结果</button>
+        </div>
+      </header>
+
+      <main class="ob-main">
+        <section class="ob-pane ob-left">
+          <div class="ob-drop" id="drop">
+            <div class="ob-empty" id="empty">
+              <div class="ob-empty-ico">🖼</div>
+              <div class="ob-empty-t">拖入图片 / 选择图片 / Ctrl+V 粘贴</div>
+              <div class="ob-empty-s">支持 PNG、JPG、WebP、截图</div>
+            </div>
+            <img id="preview" class="ob-img" hidden alt="待识别图片" />
+          </div>
+        </section>
+
+        <section class="ob-pane ob-right">
+          <div class="ob-result-head">
+            <span>识别结果</span>
+            <span class="ob-meta" id="meta"></span>
+          </div>
+          <textarea id="out" class="ob-out" spellcheck="false" placeholder="识别结果会出现在这里，可直接编辑"></textarea>
+        </section>
+      </main>
+
+      <footer class="ob-status" id="status">就绪</footer>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

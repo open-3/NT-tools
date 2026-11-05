@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      CSP 说明：本工具内嵌 <webview> 加载百度翻译，webview 是独立的渲染进程，
+      外站内容不受本页 CSP 约束。这里 frame-src 放开百度域名是为了让 webview
+      的元素本身被允许创建。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; frame-src https://fanyi.baidu.com;"
+    />
+    <title>翻译</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="tf-head">
+        <span class="tf-title">翻译</span>
+        <div class="tf-actions">
+          <button class="tf-btn" id="btn-reload" title="重新加载">重载</button>
+          <button class="tf-btn" id="btn-home" title="回到百度翻译首页">首页</button>
+          <button class="tf-btn" id="btn-browser" title="用系统浏览器打开">外部打开</button>
+        </div>
+      </header>
+      <div class="tf-body">
+        <webview
+          id="view"
+          src="https://fanyi.baidu.com/mtpe-individual/transText?ext_channel=DuSearch"
+          allowpopups
+        ></webview>
+        <div class="tf-mask" id="mask">
+          <div class="tf-spin"></div>
+          <div class="tf-mask-text">正在加载百度翻译…</div>
+        </div>
+      </div>
+      <footer class="tf-status" id="status">就绪</footer>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

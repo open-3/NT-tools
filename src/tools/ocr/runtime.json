@@ -1,0 +1,13 @@
+{
+  "_comment": "tesseract 的 wasm 有 6 个变体（普通/simd/relaxedsimd × 带不带 lstm），实测运行时只会加载 relaxedsimd-lstm 这一个。全带是 42MB 冗余，所以精确指定。换 tesseract 大版本后如果报 importScripts 失败，把这里改回 *.wasm / *.wasm.js 再确认一次。",
+  "copy": [
+    {
+      "from": "node_modules/tesseract.js/dist",
+      "include": ["worker.min.js"]
+    },
+    {
+      "from": "node_modules/tesseract.js-core",
+      "include": ["tesseract-core-relaxedsimd-lstm.wasm", "tesseract-core-relaxedsimd-lstm.wasm.js"]
+    }
+  ]
+}

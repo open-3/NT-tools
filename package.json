@@ -1,0 +1,57 @@
+{
+  "name": "agent-pulse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "并发 Agent 状态浮窗 — 只读聚合 Codex / DeepSeek Harness / WorkBuddy 的进行中与未确认会话",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-name/agent-pulse.git"
+  },
+  "main": "dist/main/main.js",
+  "author": "Agent Pulse",
+  "scripts": {
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "node scripts/build-renderer.mjs",
+    "build": "node scripts/build-main.mjs && node scripts/build-renderer.mjs",
+    "start": "node scripts/launch.mjs",
+    "dev": "npm run build && node scripts/launch.mjs -- --dev",
+    "test": "node scripts/test.mjs",
+    "dist": "npm run build && electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "build": {
+    "appId": "com.agentpulse.app",
+    "productName": "Agent Pulse",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "AgentPulse-${version}-portable.exe"
+    }
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
+  }
+}
