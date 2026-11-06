@@ -42,16 +42,263 @@ function formatError(e: unknown): string {
   return String(e);
 }
 
+/**
+ * 容错：把常见「不规范的 JSON」修成能解析的样子。
+ * 覆盖：单引号、无引号 key、尾逗号、注释。
+ * 这是「尽力而为」，不保证语义，只为把内容格式化出来而非直接报错。
+ */
+function tolerantRepair(text: string): string {
+  let s = text;
+
+  // 1) 去掉注释（// 和 /* */）—— 但要跳过字符串内部
+  s = s.replace(/("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, (m, dq, sq, comment) => {
+    if (dq != null || sq != null) return m; // 字符串内不动
+    return ''; // 注释删掉
+  });
+
+  // 2) 尾逗号：, 紧跟着 ] 或 } 去掉
+  s = s.replace(/,\s*([\]}])/g, '$1');
+
+  // 3) 单引号字符串 → 双引号（跳过已处理的双引号字符串）
+  s = s.replace(/'(\\.|[^'\\])*'/g, (m) => '"' + m.slice(1, -1).replace(/"/g, '\\"') + '"');
+
+  // 4) 无引号 key：{ 或 , 后面的标识符或包含 -_. 的 key → 加引号
+  s = s.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$\-.]*)(\s*:)/g, '$1"$2"$3');
+
+  return s;
+}
+
+
+/**
+ * 从任意文本中提取 JSON 片段（多候选）。
+ *
+ * 日志里常有 `[线程名] [级别]` 这类方括号，会干扰「找第一个 { 或 [」。
+ * 所以这里遍历每个 { 或 [ 起始点，逐个做括号配对，返回**第一个能成功
+ * JSON.parse**（必要时经过容错修复）的完整片段。
+ */
+function extractJsonFragment(text: string): { json: string; stripped: boolean } | null {
+  // 收集所有 { 和 [ 的起始位置（跳过字符串内部）
+  const starts: number[] = [];
+  let inStr = false;
+  let escNext = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      if (escNext) escNext = false;
+      else if (c === '\\') escNext = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      continue;
+    }
+    if (c === '{' || c === '[') starts.push(i);
+  }
+
+  for (const start of starts) {
+    const openCh = text[start]!;
+    const closeCh = openCh === '{' ? '}' : ']';
+    const stack: string[] = [openCh];
+    inStr = false;
+    escNext = false;
+    for (let i = start + 1; i < text.length; i++) {
+      const c = text[i]!;
+      if (inStr) {
+        if (escNext) escNext = false;
+        else if (c === '\\') escNext = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') {
+        inStr = true;
+        continue;
+      }
+      if (c === '{' || c === '[') stack.push(c);
+      else if (c === '}' || c === ']') {
+        stack.pop();
+        if (stack.length === 0) {
+          const json = text.slice(start, i + 1);
+          // 这个片段能解析吗？（严格 + 容错）
+          try {
+            JSON.parse(json);
+          } catch {
+            try {
+              JSON.parse(tolerantRepair(json));
+            } catch {
+              break; // 这个候选不行，试下一个起点
+            }
+          }
+          const stripped = start > 0 || i + 1 < text.length;
+          return { json, stripped };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function tryFormat(text: string): { ok: true; output: string } | { ok: false; error: string } {
   const trimmed = text.trim();
   if (!trimmed) return { ok: true, output: '' };
+
+  // 1) 严格解析整段
   try {
     const parsed = JSON.parse(trimmed);
     return { ok: true, output: JSON.stringify(parsed, null, 2) };
   } catch (e) {
+    // 2) 容错修复后再试
+    try {
+      const repaired = tolerantRepair(trimmed);
+      const parsed = JSON.parse(repaired);
+      return { ok: true, output: JSON.stringify(parsed, null, 2) };
+    } catch {
+      /* 继续降级，由 doFormat 做排版降级 */
+    }
     return { ok: false, error: formatError(e) };
   }
 }
+
+/**
+ * 定位文本中最大的、能完整括号配对的 JSON 片段起止位置（不校验能否 parse）。
+ *
+ * 与 extractJsonFragment 的区别：这里**不要求 JSON.parse 成功**，
+ * 只要 `{`...`}` 或 `[`...`]` 括号完整配对就返回起止。
+ * 用于「报错但仍排版」场景：定位到那坨 JSON，只排版它，前后的日志保留原样。
+ */
+function locateJsonSpan(text: string): { start: number; end: number } | null {
+  const braceStarts: number[] = [];
+  const bracketStarts: number[] = [];
+  let inStr = false;
+  let escNext = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      if (escNext) escNext = false;
+      else if (c === '\\') escNext = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      continue;
+    }
+    if (c === '{') braceStarts.push(i);
+    else if (c === '[') bracketStarts.push(i);
+  }
+
+  // 优先找 `{...}` 对象（日志里 `[...]` 方括号很常见，如线程名，容易误判）；
+  // 没有对象时才用 `[...]`（顶层数组场景）。
+  const allStarts = [...braceStarts, ...bracketStarts];
+
+  for (const start of allStarts) {
+    const openCh = text[start]!;
+    const closeCh = openCh === '{' ? '}' : ']';
+    const stack: string[] = [openCh];
+    inStr = false;
+    escNext = false;
+    for (let i = start + 1; i < text.length; i++) {
+      const c = text[i]!;
+      if (inStr) {
+        if (escNext) escNext = false;
+        else if (c === '\\') escNext = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') {
+        inStr = true;
+        continue;
+      }
+      if (c === '{' || c === '[') stack.push(c);
+      else if (c === '}' || c === ']') {
+        stack.pop();
+        if (stack.length === 0) {
+          return { start, end: i + 1 };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 容错排版：把「不规范的 JSON 文本」按括号深度换行缩进。
+ *
+ * 与 JSON.stringify(..., 2) 不同，它**不依赖 JSON.parse 成功**：
+ * 逐字符扫描，遇到 `{` / `[` 缩进 +1 并换行，`}` / `]` 缩进 -1 先换行，
+ * `,` 换行，`:` 后补空格，字符串整体原样保留（内部不拆）。
+ *
+ * 这样即使 JSON 有语法错误（缺失括号、多余逗号、日志前缀残片等），
+ * 用户也能得到「分行、缩进、可读」的视图 —— 对齐 NineTwoToolApp
+ * 用 Monaco 得到的效果：报错但仍按 JSON 结构换行显示，而不是缩成整行。
+ */
+function prettyPrintTolerant(text: string): string {
+  const out: string[] = [];
+  let line = '';
+  let indent = 0;
+  let inStr = false;
+  let escNext = false;
+
+  const flush = () => {
+    if (line.trim()) out.push('  '.repeat(indent) + line);
+    else if (line.length) out.push(line); // 保留纯空行
+    line = '';
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+
+    if (inStr) {
+      line += c;
+      if (escNext) escNext = false;
+      else if (c === '\\') escNext = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+
+    if (c === '"') {
+      inStr = true;
+      line += c;
+      continue;
+    }
+
+    if (c === '{' || c === '[') {
+      line += c;
+      indent++;
+      flush();
+      continue;
+    }
+    if (c === '}' || c === ']') {
+      flush();
+      indent = Math.max(0, indent - 1);
+      line += c;
+      continue;
+    }
+    if (c === ',') {
+      line += c;
+      flush();
+      continue;
+    }
+    if (c === ':') {
+      line += ': ';
+      continue;
+    }
+    if (c === '\n' || c === '\r') {
+      flush();
+      continue;
+    }
+    // 普通空白：跳过（换行缩进由 flush 统一处理）
+    if (c === ' ' || c === '\t') continue;
+
+    line += c;
+  }
+  flush();
+
+  return out.join('\n');
+}
+
+/** 记录当前编辑器的错误位置（供高亮层标记），-1 表示无错误 */
+let errorPos = -1;
 
 /* ---------------- 折叠区域计算 ---------------- */
 
@@ -138,13 +385,23 @@ function buildDisplay(): DisplayLine[] {
  */
 function highlightJson(text: string): string {
   let out = '';
-  let i = 0;
-  const n = text.length;
 
   /** 把一段纯文本转义成 HTML */
   const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
 
+  let i = 0;
+  const n = text.length;
+
   while (i < n) {
+    // 到达错误位置：单独输出这一个字符，包红色波浪下划线标记，
+    // 跳过正常 token 处理（errorPos 通常落在结构符号或非法字符上）
+    if (errorPos === i) {
+      const ch = text[i]!;
+      out += `<span class="hl-err-mark">${escHtml(ch)}</span>`;
+      i++;
+      continue;
+    }
+
     const c = text[i];
 
     // 字符串：整体吃掉（含转义），判断它是 key 还是 value
@@ -214,6 +471,7 @@ function render(): void {
         <span class="jb-title" title="${esc(currentPath ?? '未命名')}">${esc(title)}</span>
         <div class="jb-tools">
           <button class="btn primary" data-act="format" title="把内容解析成 JSON 并按 2 空格缩进">格式化</button>
+          <button class="btn" data-act="extract" title="从文本中提取 JSON 片段（会移除前后非 JSON 内容）">提取 JSON</button>
           <button class="btn" data-act="open">打开</button>
           <button class="btn" data-act="save" ${saveDisabled}>保存</button>
           <button class="btn" data-act="saveAs">另存为</button>
@@ -340,7 +598,9 @@ function currentContent(): string {
 }
 
 function doFormat(): void {
-  const r = tryFormat(currentContent());
+  const raw = currentContent();
+  const r = tryFormat(raw);
+  errorPos = -1;
   if (r.ok) {
     fullText = r.output;
     folds.clear();
@@ -349,9 +609,91 @@ function doFormat(): void {
     renderView();
     scrollToTop();
     setStatus('格式化完成');
-  } else {
-    setStatus(r.error, true);
+    return;
   }
+
+  // 不是合法 JSON：**不静默删数据**，但仍把 JSON 部分「分行排版」，
+  // 让用户看到结构而不是缩成一整行。日志前缀/后缀原样保留。
+  if (raw.trim()) {
+    const span = locateJsonSpan(raw);
+
+    if (span) {
+      // 定位到完整配对的 JSON 片段：只排版它，前后非 JSON 保留原样
+      const prefix = raw.slice(0, span.start);
+      const jsonPart = raw.slice(span.start, span.end);
+      const suffix = raw.slice(span.end);
+      const prettyJson = prettyPrintTolerant(jsonPart);
+
+      fullText = (prefix ? prefix + '\n' : '') + prettyJson + (suffix ? '\n' + suffix : '');
+    } else {
+      // 没有完整配对的 JSON 片段（连括号都配不平）：整段按结构排版
+      fullText = prettyPrintTolerant(raw);
+    }
+
+    folds.clear();
+    blocks = computeBlocks(fullText);
+    if (!currentPath) setDirty(fullText.length > 0);
+
+    // 排版后重新定位错误：对排版后的内容再 parse 一次，拿到对应当前文本的错误位置
+    errorPos = -1;
+    try {
+      JSON.parse(fullText);
+    } catch (e2) {
+      const m2 = /position (\d+)/.exec(e2 instanceof Error ? e2.message : String(e2));
+      if (m2) errorPos = Number(m2[1]);
+    }
+
+    renderView();
+    scrollToTop();
+    setStatus(`${r.error}（已按结构排版，错误处标红；若是日志夹 JSON，点「提取 JSON」）`, true);
+    return;
+  }
+
+  setStatus(r.error, true);
+}
+
+/**
+ * 提取 JSON：显式地从文本中抠出 JSON 片段（去掉日志前缀/后缀）。
+ *
+ * 这是**用户主动发起的操作**，不是「格式化」的隐式副作用。
+ * 提取后状态栏会明确提示「已提取，前后非 JSON 内容已移除」，
+ * 让用户清楚知道数据被裁剪过，而不是误以为原文就是纯 JSON。
+ */
+function doExtract(): void {
+  const raw = currentContent().trim();
+  if (!raw) {
+    setStatus('内容为空，无可提取', true);
+    return;
+  }
+
+  const frag = extractJsonFragment(raw);
+  if (!frag) {
+    setStatus('未找到可提取的 JSON（没有配对的 { 或 [ ）', true);
+    return;
+  }
+
+  // 提取后仍要能格式化：严格解析或容错
+  let output = frag.json;
+  try {
+    output = JSON.stringify(JSON.parse(frag.json), null, 2);
+  } catch {
+    try {
+      output = JSON.stringify(JSON.parse(tolerantRepair(frag.json)), null, 2);
+    } catch {
+      setStatus(`提取到了候选片段，但不是合法 JSON：${frag.json.slice(0, 60)}…`, true);
+      return;
+    }
+  }
+
+  fullText = output;
+  folds.clear();
+  blocks = computeBlocks(fullText);
+  if (!currentPath) setDirty(fullText.length > 0);
+  renderView();
+  scrollToTop();
+
+  const removed = raw.length - frag.json.trim().length;
+  setStatus(`已提取 JSON，移除了 ${removed} 个字符的前后非 JSON 内容`);
 }
 
 async function doOpen(): Promise<void> {
@@ -427,6 +769,7 @@ function bindEditor(): void {
     fullText = ta.value;
     blocks = computeBlocks(fullText);
     setDirty(true);
+    errorPos = -1; // 用户改了文本，错误标记失效
     refreshGutter();
   });
   ta.addEventListener('scroll', () => {
@@ -439,6 +782,9 @@ function handleAction(act: string): void {
   switch (act) {
     case 'format':
       doFormat();
+      break;
+    case 'extract':
+      doExtract();
       break;
     case 'open':
       void doOpen();

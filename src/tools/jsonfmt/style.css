@@ -218,9 +218,17 @@ body {
   caret-color: #1f2328;
   background: transparent;
 }
-/* 选区要有可见底色，否则透明文字选区看不见 */
+/* 选区底色 + 选中文字可见。
+ * 关键：.jb-text 的 color 是 transparent（色来自下方高亮层），
+ * 若 ::selection 不显式给 color，选中时文字仍是透明，只剩一片浅蓝块、看不到字。
+ * 这里让选中文字显形为深色，叠加浅蓝背景，对齐 VS Code 的选区体验。 */
 .jb-text::selection {
-  background: #b6d4fe;
+  background: #c7dfff;
+  color: #1f2328;
+}
+.jb-text[readonly]::selection {
+  background: #d8e6f7;
+  color: #1f2328;
 }
 .jb-text[readonly] {
   caret-color: transparent;
@@ -241,6 +249,13 @@ body {
 }
 .hl-punct {
   color: var(--hl-punct);
+}
+
+/* 错误位置标记：红色波浪下划线 + 深红字符（对齐 VS Code 诊断样式） */
+.hl-err-mark {
+  color: #d02424;
+  text-decoration: underline wavy #e05555;
+  text-decoration-skip-ink: none;
 }
 
 /* ---------- 状态栏 ---------- */
