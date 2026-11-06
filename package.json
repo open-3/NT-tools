@@ -37,10 +37,17 @@
       "dist/**/*",
       "package.json"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "open-3",
+        "repo": "NT-tools"
+      }
+    ],
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -48,11 +55,19 @@
       ],
       "icon": "build/icon.ico"
     },
-    "portable": {
-      "artifactName": "AgentPulse-${version}-portable.exe"
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Agent Pulse",
+      "artifactName": "AgentPulse-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "tesseract.js": "^7.0.0",

@@ -8,7 +8,10 @@ const common = {
   platform: 'node',
   format: 'cjs',
   target: 'node22',
-  external: ['electron'],
+  // electron-updater 有内部动态 require（js-yaml、electron、fs-extra 等），
+  // bundle 进来会破坏其运行时解析，所以和 electron 一样保持 external，
+  // 由 electron-builder 打进 asar 后走 node_modules 正常 require。
+  external: ['electron', 'electron-updater'],
   sourcemap: true,
   logLevel: 'info',
 };

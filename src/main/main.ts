@@ -11,6 +11,7 @@ import { AutoCollapse } from './autocollapse';
 import { readQuota } from './quota';
 import { QuotaState } from './adapters/types';
 import { showToolboxMenu, installToolIpc } from './tools';
+import { initUpdater, checkForUpdates, installUpdaterIpc } from './updater';
 
 const WIDTH = 362;
 const HEADER_H = 42;
@@ -418,6 +419,11 @@ function buildTrayMenu(): void {
       },
     },
     { type: 'separator' },
+    {
+      label: `检查更新（当前 v${app.getVersion()}）`,
+      click: () => checkForUpdates(),
+    },
+    { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } },
   ]);
   tray.setContextMenu(menu);
@@ -634,6 +640,9 @@ function installIpc(): void {
 
   // 工具窗口的打开/保存/另存
   installToolIpc();
+
+  // 远程更新
+  installUpdaterIpc();
 }
 
 /* ------------------------------------------------------------------ */
@@ -658,6 +667,9 @@ if (!gotLock) {
 
     createWindow();
     installIpc();
+
+    // 远程更新：启动后静默检查（内部延迟 8 秒）
+    if (win) initUpdater(win);
 
     tray = new Tray(trayIcon(false));
     tray.setToolTip('Agent Pulse');
