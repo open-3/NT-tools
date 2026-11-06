@@ -9,19 +9,8 @@
 //   - 保存 / 格式化 / 打开一律用 fullText，绝不写回折叠后的文本
 
 // 空导出让本文件成为模块（`declare global` 只能出现在模块里）
+// window.tool 的完整类型见 src/tools/global.d.ts，这里不再重复声明
 export {};
-
-interface ToolApi {
-  openFile(): Promise<{ path: string; content: string | null; error?: string } | null>;
-  saveFile(filePath: string, content: string): Promise<{ ok: boolean; path?: string; error?: string }>;
-  saveFileAs(defaultName: string, content: string): Promise<{ ok: boolean; path?: string; error?: string } | null>;
-}
-
-declare global {
-  interface Window {
-    tool: ToolApi;
-  }
-}
 
 const app = document.getElementById('app')!;
 

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>剪贴板历史</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">剪贴板历史</span>
+        <div class="u-actions">
+          <button class="u-btn" id="btn-pause" title="暂停/恢复监听">暂停</button>
+          <button class="u-btn" id="btn-clear">清空</button>
+        </div>
+      </header>
+      <div class="u-body" style="padding:0;">
+        <div id="list" style="padding:8px 14px;"></div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

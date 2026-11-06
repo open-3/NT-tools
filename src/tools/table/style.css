@@ -1,0 +1,169 @@
+:root {
+  --bg: #ffffff;
+  --panel: #f3f3f3;
+  --line: #e1e1e1;
+  --t1: #1f2328;
+  --t2: #57606a;
+  --t3: #8b949e;
+  --acc: #0969da;
+  --mono: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--t1);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 标题栏 ---------- */
+.u-head {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  -webkit-app-region: drag;
+}
+
+.u-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t2);
+}
+
+.u-actions {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.u-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--t1);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.u-btn:hover {
+  background: #f0f0f0;
+  border-color: #d0d0d0;
+}
+.u-btn:active {
+  background: #e6e6e6;
+}
+.u-btn.primary {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: #fff;
+}
+.u-btn.primary:hover {
+  background: #0860ca;
+  border-color: #0860ca;
+}
+
+/* ---------- 内容区 ---------- */
+.u-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow: auto;
+}
+
+/* ---------- 通用表单 ---------- */
+.u-field {
+  margin-bottom: 14px;
+}
+.u-label {
+  display: block;
+  font-size: 11px;
+  color: var(--t3);
+  margin-bottom: 5px;
+}
+.u-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--t1);
+  background: #fff;
+  outline: none;
+  font-family: var(--mono);
+  transition: border-color 0.12s;
+}
+.u-input:focus {
+  border-color: #b6d4fe;
+}
+textarea.u-input {
+  resize: vertical;
+  line-height: 1.55;
+}
+.u-input[readonly] {
+  background: var(--panel);
+  color: var(--t2);
+}
+
+.u-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.u-row .u-input {
+  flex: 1;
+}
+
+/* ---------- 结果卡 ---------- */
+.u-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.u-card-title {
+  font-size: 11px;
+  color: var(--t3);
+  margin-bottom: 6px;
+}
+.u-card-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--t1);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+/* ---------- 空态 ---------- */
+.u-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--t3);
+  font-size: 12px;
+}

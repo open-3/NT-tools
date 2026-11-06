@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self' file: data: blob:;" />
+    <title>截图翻译</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">截图翻译</span>
+        <div class="u-actions">
+          <button class="u-btn primary" id="btn-capture">截图识别</button>
+          <button class="u-btn" id="btn-copy" disabled>复制文字</button>
+          <button class="u-btn" id="btn-translate" disabled>去翻译</button>
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">截图预览</label>
+          <div id="preview" style="text-align:center;min-height:80px;">
+            <span class="u-empty">点「截图识别」后，程序会截图整个屏幕并识别其中的文字</span>
+          </div>
+        </div>
+        <div class="u-field">
+          <label class="u-label">识别文字（可编辑）</label>
+          <textarea class="u-input" id="text" rows="8" placeholder="识别结果…"></textarea>
+        </div>
+        <div class="u-field">
+          <label class="u-label" id="status-label">状态</label>
+          <div class="u-card" id="status">就绪</div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

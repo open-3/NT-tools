@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>表格查看</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">表格查看</span>
+        <div class="u-actions">
+          <button class="u-btn primary" id="btn-open">打开表格</button>
+          <div class="u-label" id="sheet-tabs" style="display:flex;gap:6px;align-items:center;margin:0;"></div>
+        </div>
+      </header>
+      <div class="u-body" style="padding:0;display:flex;flex-direction:column;">
+        <div style="flex:1;min-height:0;overflow:auto;padding:0;">
+          <table id="table" style="border-collapse:collapse;font-size:12px;font-family:var(--mono);"></table>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

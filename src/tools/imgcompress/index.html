@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data: blob:;" />
+    <title>图片压缩</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">图片压缩</span>
+        <div class="u-actions">
+          <button class="u-btn primary" id="btn-open">选择图片</button>
+          <button class="u-btn" id="btn-download" disabled>下载压缩图</button>
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">压缩质量（越小越狠）</label>
+          <input class="u-input" id="quality" type="number" value="70" min="10" max="100" style="width:120px;" />
+        </div>
+        <div class="u-field">
+          <label class="u-label">缩放比例（原尺寸的百分比）</label>
+          <input class="u-input" id="scale" type="number" value="100" min="10" max="100" style="width:120px;" />
+        </div>
+        <div class="u-card" id="status" style="text-align:center;">
+          <span class="u-empty">选择图片后显示压缩前后对比</span>
+        </div>
+        <div class="u-field">
+          <label class="u-label">预览</label>
+          <div id="preview" style="text-align:center;"></div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>环境变量</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">环境变量</span>
+        <div class="u-actions">
+          <input class="u-input" id="filter" type="text" placeholder="筛选…" style="height:28px;font-size:12px;width:180px;" />
+          <button class="u-btn" id="btn-copy">复制全部</button>
+        </div>
+      </header>
+      <div class="u-body" style="padding:0;display:flex;flex-direction:column;">
+        <div style="padding:8px 14px 0;color:var(--t3);font-size:11px;" id="count"></div>
+        <div style="flex:1;min-height:0;overflow:auto;padding:8px 14px 14px;">
+          <table id="table" style="border-collapse:collapse;font-size:12px;font-family:var(--mono);width:100%;"></table>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>
