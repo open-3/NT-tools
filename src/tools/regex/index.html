@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>正则测试</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">正则测试</span>
+        <div class="u-actions">
+          <label class="u-btn" style="cursor:pointer;align-items:center;display:inline-flex;">
+            <input type="checkbox" id="flag-i" checked /> i
+          </label>
+          <label class="u-btn" style="cursor:pointer;align-items:center;display:inline-flex;">
+            <input type="checkbox" id="flag-g" checked /> g
+          </label>
+          <label class="u-btn" style="cursor:pointer;align-items:center;display:inline-flex;">
+            <input type="checkbox" id="flag-m" /> m
+          </label>
+          <label class="u-btn" style="cursor:pointer;align-items:center;display:inline-flex;">
+            <input type="checkbox" id="flag-s" /> s
+          </label>
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">正则表达式</label>
+          <input class="u-input" id="pattern" type="text" placeholder="例如 \d{4}-\d{2}-\d{2}" />
+        </div>
+        <div class="u-field">
+          <label class="u-label">测试文本</label>
+          <textarea class="u-input" id="test" rows="8" placeholder="粘贴要测试的文本…"></textarea>
+        </div>
+        <div class="u-field">
+          <label class="u-label">匹配结果（高亮）</label>
+          <div class="u-card" id="result" style="min-height:60px;">
+            <span class="u-empty" id="empty">输入正则和文本后自动匹配</span>
+          </div>
+        </div>
+        <div class="u-field">
+          <label class="u-label" id="count-label">匹配数</label>
+          <div class="u-card" id="groups"></div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

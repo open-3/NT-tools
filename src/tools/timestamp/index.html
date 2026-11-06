@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>时间戳换算</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">时间戳换算</span>
+        <div class="u-actions">
+          <button class="u-btn" id="btn-now">设为现在</button>
+          <button class="u-btn" id="btn-copy" disabled>复制当前时间戳</button>
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">时间戳（秒或毫秒，自动识别）</label>
+          <input class="u-input" id="ts" type="text" placeholder="例如 1793721600000 或 1793721600" />
+        </div>
+
+        <div class="u-row" style="margin-bottom:14px;">
+          <button class="u-btn primary" id="btn-convert" style="flex:1;">换算 →</button>
+          <button class="u-btn" id="btn-s2ms" style="flex:1;">秒 → 毫秒</button>
+          <button class="u-btn" id="btn-ms2s" style="flex:1;">毫秒 → 秒</button>
+        </div>
+
+        <div class="u-field">
+          <label class="u-label">本地时间（本地时区）</label>
+          <input class="u-input" id="out-local" readonly placeholder="—" />
+        </div>
+        <div class="u-field">
+          <label class="u-label">UTC 时间</label>
+          <input class="u-input" id="out-utc" readonly placeholder="—" />
+        </div>
+        <div class="u-field">
+          <label class="u-label">ISO 8601</label>
+          <input class="u-input" id="out-iso" readonly placeholder="—" />
+        </div>
+        <div class="u-field">
+          <label class="u-label">相对现在</label>
+          <input class="u-input" id="out-ago" readonly placeholder="—" />
+        </div>
+
+        <div class="u-card">
+          <div class="u-card-title">当前时间戳（实时）</div>
+          <div class="u-card-value" id="now-sec">—</div>
+          <div class="u-card-value" id="now-ms" style="margin-top:2px;">—</div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

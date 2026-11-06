@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>颜色转换</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">颜色转换</span>
+        <div class="u-actions">
+          <input type="color" id="picker" value="#0969da" title="取色器" style="width:28px;height:28px;border:none;background:none;cursor:pointer;" />
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">颜色值（支持 #hex / rgb / hsl）</label>
+          <input class="u-input" id="input" type="text" placeholder="例如 #0969da 或 rgb(9,105,218)" />
+        </div>
+        <div class="u-card" style="text-align:center;">
+          <div id="swatch" style="height:72px;border-radius:6px;background:#0969da;"></div>
+        </div>
+        <div class="u-field">
+          <label class="u-label">HEX</label>
+          <div class="u-card">
+            <div class="u-card-value" id="hex" data-copy>#0969da</div>
+          </div>
+        </div>
+        <div class="u-field">
+          <label class="u-label">RGB</label>
+          <div class="u-card">
+            <div class="u-card-value" id="rgb" data-copy>rgb(9, 105, 218)</div>
+          </div>
+        </div>
+        <div class="u-field">
+          <label class="u-label">HSL</label>
+          <div class="u-card">
+            <div class="u-card-value" id="hsl" data-copy>hsl(212, 92%, 45%)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

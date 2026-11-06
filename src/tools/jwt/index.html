@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>JWT 解析</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">JWT 解析</span>
+        <div class="u-actions">
+          <button class="u-btn" id="btn-exp" disabled>检查过期</button>
+        </div>
+      </header>
+      <div class="u-body">
+        <div class="u-field">
+          <label class="u-label">JWT（粘贴完整 token）</label>
+          <textarea class="u-input" id="jwt" rows="4" placeholder="eyJhbGciOiJIUzI1NiIs..." style="word-break:break-all;"></textarea>
+        </div>
+        <div class="u-field">
+          <label class="u-label">Header</label>
+          <pre class="u-input" id="header" readonly style="min-height:60px;white-space:pre-wrap;word-break:break-all;"></pre>
+        </div>
+        <div class="u-field">
+          <label class="u-label">Payload</label>
+          <pre class="u-input" id="payload" readonly style="min-height:120px;white-space:pre-wrap;word-break:break-all;"></pre>
+        </div>
+        <div class="u-field">
+          <label class="u-label" id="exp-label">过期状态</label>
+          <div class="u-card" id="exp"></div>
+        </div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

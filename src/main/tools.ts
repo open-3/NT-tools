@@ -27,6 +27,11 @@ export interface ToolDef {
    * 所以整组工具窗口统一带上；只有真的用了 webview 的工具才有实际作用。
    */
   webview?: boolean;
+  /**
+   * 窗口尺寸（宽×高）。省略时用默认大窗（JSON 格式化等长内容工具）。
+   * 小工具（时间戳、正则、颜色…）用紧凑尺寸，避免开出一大片空白。
+   */
+  size?: { width: number; height: number };
 }
 
 /** 工具注册表 —— 以后加小工具就在这加一行。 */
@@ -34,6 +39,12 @@ export const TOOLS: ToolDef[] = [
   { id: 'jsonfmt', label: 'JSON 格式化', icon: '{ }' },
   { id: 'translate', label: '翻译', icon: '译', webview: true },
   { id: 'ocr', label: '图片取字', icon: '文' },
+  { id: 'timestamp', label: '时间戳换算', icon: '⏱', size: { width: 560, height: 640 } },
+  { id: 'codec', label: '编码转换', icon: '⇄', size: { width: 620, height: 680 } },
+  { id: 'regex', label: '正则测试', icon: '.*', size: { width: 760, height: 720 } },
+  { id: 'generate', label: '随机生成', icon: '⚄', size: { width: 560, height: 680 } },
+  { id: 'color', label: '颜色转换', icon: '●', size: { width: 540, height: 620 } },
+  { id: 'jwt', label: 'JWT 解析', icon: '🔑', size: { width: 720, height: 720 } },
 ];
 
 /** 每个工具当前打开的窗口列表（按 id 分组，窗口关闭时移除） */
@@ -52,11 +63,11 @@ export function openTool(toolId: string): void {
   const def = TOOLS.find((t) => t.id === toolId);
   if (!def) return;
 
-  // 目标尺寸：760×580 → 1140×1160（宽 1.5 倍、高 2 倍）。
-  // 但 1160 在 1080p 笔记本上会超出可用高度，所以按当前屏幕再收一下，
-  // 同时居中，避免窗口跑到屏幕外。
-  const targetW = 1140;
-  const targetH = 1160;
+  // 目标尺寸：优先用工具自带的 size（小工具紧凑），否则默认大窗。
+  // 大窗 1140×1160 是给 JSON 格式化这类长内容工具调的；
+  // 1160 在 1080p 笔记本上会超出可用高度，所以按当前屏幕再收一下，同时居中。
+  const targetW = def.size?.width ?? 1140;
+  const targetH = def.size?.height ?? 1160;
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const width = Math.min(targetW, Math.round(area.width * 0.92));
   const height = Math.min(targetH, Math.round(area.height * 0.92));
