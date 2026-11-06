@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>终端小抄</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="u-head">
+        <span class="u-title">终端小抄</span>
+        <div class="u-actions">
+          <input class="u-input" id="filter" type="text" placeholder="搜索命令 / 说明…" style="height:28px;font-size:12px;width:220px;" />
+        </div>
+      </header>
+      <div id="tabs" style="flex:none;display:flex;gap:6px;padding:8px 14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;"></div>
+      <div class="u-body" style="padding:0;">
+        <div style="padding:8px 14px 0;color:var(--t3);font-size:11px;" id="count"></div>
+        <div id="list" style="padding:8px 14px 14px;"></div>
+      </div>
+    </div>
+    <script src="index.js"></script>
+  </body>
+</html>

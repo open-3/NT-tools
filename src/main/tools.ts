@@ -57,6 +57,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'netstat', label: '端口进程', icon: '⬡', size: { width: 720, height: 720 } },
   { id: 'clipboard', label: '剪贴板历史', icon: '📋', size: { width: 560, height: 680 } },
   { id: 'env', label: '环境变量', icon: '🎛', size: { width: 700, height: 740 } },
+  // 其他小工具
+  { id: 'cheatsheet', label: '终端小抄', icon: '⌘', size: { width: 740, height: 760 } },
 ];
 
 /** 每个工具当前打开的窗口列表（按 id 分组，窗口关闭时移除） */
