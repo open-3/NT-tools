@@ -1,0 +1,117 @@
+# 发布新版本
+
+远程更新走 electron-updater + GitHub Releases。每次发新版按下面的步骤走一遍。
+
+---
+
+## 前置条件
+
+- 已安装依赖（`npm install`）
+- 代码已提交、工作区干净
+- 能访问 github.com（本机走 Clash 代理，git 已配好 `http.proxy=7897`）
+
+---
+
+## 一、改版本号
+
+编辑 `package.json` 的 `version`，遵循 semver：
+
+```
+0.1.0  →  0.1.1   (修复 bug)
+0.1.0  →  0.2.0   (新功能)
+0.1.0  →  1.0.0   (大版本/破坏性变更)
+```
+
+改完提交：
+
+```bash
+git add package.json package-lock.json
+git commit -m "chore: 版本号升级到 0.1.1"
+```
+
+> `package-lock.json` 里的 `version` 字段也要同步（`npm install` 或手动改，
+> 保证 lock 里的版本和 version 字段一致，否则 npm 会警告）。
+
+---
+
+## 二、打包 + 发布到 GitHub Releases
+
+**方式 A：一条命令（推荐，需要 GitHub Token）**
+
+```bash
+$env:GH_TOKEN = "ghp_xxxxxxxxxxxxxxxx"
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npx electron-builder --win --x64 --publish always
+```
+
+`--publish always` 会自动：
+1. 构建 NSIS installer
+2. 生成 latest.yml + .blockmap
+3. 上传到 GitHub Releases，创建 tag（如 `v0.1.1`）
+
+**方式 B：手动发布（没有 Token 时）**
+
+1. 本地打包（不发布）：
+   ```bash
+   npx electron-builder --win --x64
+   ```
+2. 到 GitHub 仓库 → Releases → Draft a new release
+3. Tag 填 `v0.1.1`（**必须带 v 前缀**，electron-updater 按这个找）
+4. 上传 `release/` 里的三个文件：
+   - `AgentPulse-Setup-0.1.1.exe`
+   - `latest.yml`
+   - `AgentPulse-Setup-0.1.1.exe.blockmap`
+5. 发布
+
+> 关键：**三个文件必须都在同一个 Release 的同一层级**。electron-updater
+> 检查更新时读 `latest.yml`，里面的 `url` 是相对路径，指向同目录的 exe 和 blockmap。
+
+---
+
+## 三、验证
+
+旧版本客户端启动后（8 秒静默检查或托盘「检查更新」），会：
+
+1. 检测到新版本 → 弹「发现新版本 0.1.1」
+2. 点「立即更新」→ 下载（走 blockmap 增量）
+3. 下载完 → 提示重启安装
+4. 重启后自动装新版
+
+想手动验一次：装一个旧版 installer，改个假的大版本号发布，看旧版能否检测到。
+
+---
+
+## 常见问题
+
+### Q: 「检查更新」报 not found / 404？
+
+说明 GitHub Releases 里**还没有对应的 tag**。electron-updater 找的是
+`https://github.com/open-3/NT-tools/releases/download/v<version>/latest.yml`。
+确认 Release 的 tag 版本号、latest.yml 都已上传。
+
+### Q: 更新下载后没自动装？
+
+electron-updater 的 `quitAndInstall` 依赖 AppId（`com.agentpulse.app`）稳定。
+若改过 `appId`，旧版无法识别新版 installer，会静默失败——不要改 appId。
+
+### Q: 开发态（npm start）点检查更新？
+
+开发态 `!app.isPackaged` 直接跳过，返回「开发模式下不检查更新」，
+不会去连 GitHub。只在安装版里真正检查。
+
+### Q: 为什么从 portable 改成了 installer？
+
+portable 每次运行解压到临时目录，无法原地更新（更新后重启就丢）。
+installer 有固定安装路径（`%LOCALAPPDATA%\Programs\agent-pulse`），
+electron-updater 才能做增量替换。这是换发行形态的根本原因。
+
+---
+
+## 相关文件
+
+| 文件 | 作用 |
+|---|---|
+| `src/main/updater.ts` | 更新逻辑（检查/下载/安装/进度） |
+| `package.json` 的 `build.publish` | 更新源仓库配置 |
+| `package.json` 的 `build.nsis` | 安装包配置（oneClick、快捷方式） |
+| `scripts/build-main.mjs` | electron-updater 设为 external |

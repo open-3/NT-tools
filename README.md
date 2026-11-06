@@ -178,13 +178,14 @@ cd app
 npm install
 npm start      # 构建 + 启动
 npm test       # 跑单测
-npm run dist   # 打包免安装 exe
+npm run dist   # 打包安装版 exe
 ```
 
-打包产物：`release/AgentPulse-*-portable.exe`（约 100MB，免安装）。
+打包产物：`release/AgentPulse-Setup-*.exe`（NSIS 安装包，双击即装）。
 
 首次启动后浮窗出现在主屏右侧偏上，托盘图标在通知区域。
 检测不到的工具不显示，也不报错。
 
+发布新版本（远程更新）的操作步骤见 [RELEASE.md](RELEASE.md)；
 技术实现、性能调优、踩坑记录见 [DEVELOPMENT.md](DEVELOPMENT.md)；
 产品侧的设计与取舍见 [设计方案](../桌面Agent状态浮窗-设计方案.md)。
