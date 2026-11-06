@@ -430,25 +430,67 @@ function applyAlwaysOnTop(on: boolean): void {
   else win.setVisibleOnAllWorkspaces(false);
 }
 
-/** 开机自启：开发态（electron.exe + 参数）走启动文件夹快捷方式，打包后走注册表 */
+/**
+ * 开机自启。
+ *
+ * 关键坑：`process.execPath` 在 portable 包里是指向「临时解压目录」的
+ * （electron-builder 的 portable 每次运行解压到 `%TEMP%/<随机>/Agent Pulse.exe`），
+ * 注册表/自启项一旦写这个路径，重启后临时目录被清，自启就失效。
+ *
+ * 所以必须先分辨运行形态，各自指向「能长期存活」的路径：
+ *   - portable：electron-builder 会注入 `PORTABLE_EXECUTABLE_FILE`，指向用户双击
+ *     的那个 .exe 本体 —— 这才是要自启的东西。
+ *   - 常规安装 / unpacked：`process.execPath` 就是真实安装路径，直接用。
+ *   - 开发态：electron.exe + app 路径，走启动文件夹快捷方式。
+ *
+ * portable 无法用 setLoginItemSettings 直接登记（它登记的是 execPath），
+ * 因此统一用「启动文件夹快捷方式」方案 —— 它只放一个 .lnk，指向目标 exe，
+ * 对三种形态都可靠，且删除 .lnk 即可取消。
+ */
 function applyAutostart(on: boolean): void {
   try {
-    if (!app.isPackaged) {
-      const startup = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-      const lnk = path.join(startup, 'Agent Pulse.lnk');
-      if (!on) {
-        fs.rmSync(lnk, { force: true });
-        return;
-      }
-      // 用 PowerShell 生成快捷方式，避免引入额外原生依赖
-      const { execFile } = require('node:child_process');
-      const target = process.execPath;
-      const args = `"${app.getAppPath()}"`;
-      const ps = `$s=(New-Object -COM WScript.Shell).CreateShortcut('${lnk}');$s.TargetPath='${target}';$s.Arguments='${args}';$s.WorkingDirectory='${path.dirname(app.getAppPath())}';$s.Save()`;
-      execFile('powershell.exe', ['-NoProfile', '-Command', ps], () => {});
+    const startup = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+    const lnk = path.join(startup, 'Agent Pulse.lnk');
+
+    if (!on) {
+      // 同时清掉启动文件夹快捷方式与注册表 Run 里的项，避免历史脏数据残留
+      fs.rmSync(lnk, { force: true });
+      app.setLoginItemSettings({ openAtLogin: false });
       return;
     }
-    app.setLoginItemSettings({ openAtLogin: on, path: process.execPath });
+
+    // 1) 解析「真正要自启的 exe」及其启动参数
+    let target = process.execPath;
+    let args = '';
+
+    if (app.isPackaged) {
+      // electron-builder portable 注入的本体路径；常规安装下无此变量
+      const portableExe = process.env.PORTABLE_EXECUTABLE_FILE;
+      if (portableExe) {
+        target = portableExe;
+        // portable 本体不需要额外参数
+      }
+    } else {
+      // 开发态：electron.exe 要带上 app 路径才能启动
+      target = process.execPath;
+      args = `"${app.getAppPath()}"`;
+    }
+
+    // 2) 用 PowerShell COM 建快捷方式（不引入原生依赖）
+    const { execFile } = require('node:child_process');
+    const dir = path.dirname(target);
+    const ps =
+      `$s=(New-Object -COM WScript.Shell).CreateShortcut('${lnk.replace(/'/g, "''")}');` +
+      `$s.TargetPath='${target.replace(/'/g, "''")}';` +
+      `$s.Arguments='${args.replace(/'/g, "''")}';` +
+      `$s.WorkingDirectory='${dir.replace(/'/g, "''")}';` +
+      `$s.Description='Agent Pulse';` +
+      `$s.Save()`;
+    execFile('powershell.exe', ['-NoProfile', '-Command', ps], () => {});
+
+    // 3) 同时登记注册表 Run（双保险；win-unpacked 的常规场景也覆盖）
+    //    但绝不写 process.execPath —— portable 下那是临时路径。
+    app.setLoginItemSettings({ openAtLogin: true, path: target });
   } catch {
     /* 自启失败不影响主功能 */
   }
