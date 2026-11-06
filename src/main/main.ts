@@ -661,6 +661,11 @@ if (!gotLock) {
     store = new Store();
     initAutoCollapse();
 
+    // 启动时同步开机自启状态：store 里的 autostart 若为 true，确保系统
+    // 自启项确实存在（注册表项可能因卸载/清理/换形态而丢失，导致「以为
+    // 开了自启实际没生效」）。
+    if (store.get().autostart) applyAutostart(true);
+
     if (process.platform === 'win32') {
       app.setAppUserModelId('com.agentpulse.app');
     }
