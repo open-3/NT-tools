@@ -147,7 +147,7 @@ export function initUpdater(target: BrowserWindow): void {
   // 启动后延迟几秒静默检查一次，然后每 1 小时周期检查一次。
   // 之前只查一次（setTimeout 一次性），应用常驻时不会自动发现新版本。
   // 用 setInterval 循环，首个间隔 8 秒后触发、之后每小时。
-  const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 小时
+  const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 分钟
   setTimeout(() => {
     void doCheckAndUpdate(false);
     setInterval(() => {

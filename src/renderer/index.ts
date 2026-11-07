@@ -89,6 +89,29 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+/**
+ * 工具图标：<svg> 内联（CSP img-src 为 none，不能用 <img>，但内联 SVG 是 HTML 元素）。
+ * 每个 agent 一个辨识度高的简洁图标，替代原来难懂的单个字母。
+ */
+function badgeIcon(agent: string): string {
+  switch (agent) {
+    case 'codex':
+      // 代码符号 </> 风格
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3"/><path d="M16 9l4 3-4 3"/><path d="M13 6l-2 12"/></svg>';
+    case 'dsh':
+      // 终端提示符 >_
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg>';
+    case 'workbuddy':
+      // 公文包
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></svg>';
+    case 'devin':
+      // 机器人/齿轮圈
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 7V4"/><circle cx="12" cy="4" r="1"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/></svg>';
+    default:
+      return '';
+  }
+}
+
 /** 相对时间：<60s 显示秒，<60m 显示分，<24h 显示时，否则天 */
 function relTime(ts: number): string {
   const d = Math.max(0, Date.now() - ts);
@@ -213,8 +236,9 @@ function renderItem(s: AgentSession): string {
   return `
     <div class="${cls}" data-key="${esc(s.key)}">
       <div class="bar"></div>
-      <div class="badge ${esc(s.badge)}">${esc(s.badge)}</div>
+      <div class="badge badge-${esc(s.agent)}">${badgeIcon(s.agent)}</div>
       <div class="body">
+        <div class="agent" title="${esc(s.agentLabel)}">${esc(s.agentLabel)}</div>
         <div class="r1">
           <div class="title" title="${esc(s.title)}">${esc(s.title)}</div>
           ${ctxHtml}
