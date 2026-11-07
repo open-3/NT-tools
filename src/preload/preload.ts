@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld('pulse', {
   onState: (cb: (s: any) => void) => {
     ipcRenderer.on('pulse:state', (_e, s) => cb(s));
   },
+  onUpdateEvent: (cb: (s: any) => void) => {
+    ipcRenderer.on('pulse:update-event', (_e, s) => cb(s));
+  },
 });

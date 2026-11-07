@@ -56,8 +56,18 @@ declare global {
       setHeight(h: number): void;
       onUpdate(cb: (s: Snapshot) => void): void;
       onState(cb: (s: { alwaysOnTop: boolean; collapsed: boolean }) => void): void;
+      onUpdateEvent(cb: (s: UpdateEvent) => void): void;
     };
   }
+}
+
+/** 主进程 updater 推给渲染层的更新事件 */
+interface UpdateEvent {
+  state: 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  version?: string;
+  percent?: number;
+  bytesPerSecond?: number;
+  message?: string;
 }
 
 const root = document.getElementById('root')!;
@@ -68,6 +78,8 @@ let breatheTimer: number | null = null;
 let breatheOn = false;
 /** 完成未读是否已展开（默认折叠） */
 let doneExpanded = false;
+/** 更新下载状态（进度条数据），null 表示无进行中的更新 */
+let updateStatus: { state: string; percent: number; message?: string } | null = null;
 
 /* ---------------- 工具 ---------------- */
 
@@ -289,7 +301,33 @@ function renderFull(snap: Snapshot): string {
       </div>
       ${body}
       ${footer}
+      ${updateBarHtml()}
     </div>`;
+}
+
+/**
+ * 更新下载进度条：仅在「正在下载」时显示，下载完/出错/无更新时隐藏。
+ * 是一根细进度条 + 百分比文字。
+ * 注意：宽度不用内联 style（CSP style-src 'self' 会拦），
+ * 由 paint 渲染后用 JS 设 fill 的 style.width。
+ */
+function updateBarHtml(): string {
+  if (!updateStatus) return '';
+  const pct = Math.max(0, Math.min(100, Math.round(updateStatus.percent ?? 0)));
+  return `
+    <div class="p-update-bar">
+      <div class="p-update-track"><div class="p-update-fill" data-update-fill></div></div>
+      <span class="p-update-text">更新 ${pct}%</span>
+    </div>`;
+}
+
+/** paint 渲染后，用 JS 设进度条宽度（绕过 CSP 对内联 style 的限制） */
+function applyUpdateBarWidth(): void {
+  const fill = root.querySelector('.p-update-fill') as HTMLElement | null;
+  if (fill && updateStatus) {
+    const pct = Math.max(0, Math.min(100, Math.round(updateStatus.percent ?? 0)));
+    fill.style.width = pct + '%';
+  }
 }
 
 /**
@@ -415,6 +453,7 @@ function handleContextMenu(e: MouseEvent): void {
 function paint(snap: Snapshot): void {
   snapshot = snap;
   root.innerHTML = collapsed ? renderMini(snap) : renderFull(snap);
+  applyUpdateBarWidth();
   syncHeight();
 }
 
@@ -433,6 +472,17 @@ async function boot(): Promise<void> {
   window.pulse.onState((s) => {
     if (collapsed === s.collapsed) return;
     collapsed = s.collapsed;
+    if (snapshot) paint(snapshot);
+  });
+
+  // 更新事件：下载进度 → 显示进度条；其他状态 → 隐藏进度条
+  window.pulse.onUpdateEvent((e: UpdateEvent) => {
+    if (e.state === 'downloading') {
+      updateStatus = { state: 'downloading', percent: e.percent ?? 0 };
+    } else {
+      updateStatus = null;
+    }
+    // 进度条出现/消失会改变窗口高度，重画一次
     if (snapshot) paint(snapshot);
   });
 

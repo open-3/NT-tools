@@ -11,7 +11,7 @@ import { AutoCollapse } from './autocollapse';
 import { readQuota } from './quota';
 import { QuotaState } from './adapters/types';
 import { showToolboxMenu, installToolIpc } from './tools';
-import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener } from './updater';
+import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener, setUpdaterProgressListener } from './updater';
 
 const WIDTH = 362;
 const HEADER_H = 42;
@@ -687,6 +687,14 @@ if (!gotLock) {
     tray.setToolTip('Agent Pulse');
     tray.on('click', () => toggleVisible());
     buildTrayMenu();
+
+    // 下载进度 → 更新托盘 tooltip（「正在下载更新 xx%」），
+    // 让用户悬停托盘图标就能看到进度。下载完成/出错由状态回调恢复菜单。
+    setUpdaterProgressListener((percent) => {
+      if (tray) {
+        tray.setToolTip(`Agent Pulse · 正在下载更新 ${Math.round(percent)}%`);
+      }
+    });
 
     globalShortcut.register('Alt+Shift+A', () => toggleVisible());
     globalShortcut.register('Alt+Shift+C', () => {

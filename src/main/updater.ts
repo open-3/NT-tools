@@ -34,6 +34,8 @@ let autoPromptShown = false;
 let latestAvailableVersion: string | null = null;
 /** 更新状态变化回调（发现新版/无新版时触发，main.ts 用它重建托盘菜单） */
 let onStateChange: (() => void) | null = null;
+/** 下载进度回调（下载百分比变化时触发，main.ts 用它更新托盘 tooltip） */
+let onDownloadProgress: ((percent: number) => void) | null = null;
 
 function notifyStateChange(): void {
   if (onStateChange) onStateChange();
@@ -53,6 +55,11 @@ export function getAvailableVersion(): string | null {
 /** 供 main.ts 注册：更新状态变化时重建托盘菜单 */
 export function setUpdaterStateListener(cb: () => void): void {
   onStateChange = cb;
+}
+
+/** 供 main.ts 注册：下载进度变化时更新托盘 tooltip */
+export function setUpdaterProgressListener(cb: (percent: number) => void): void {
+  onDownloadProgress = cb;
 }
 
 /**
@@ -169,6 +176,7 @@ export function initUpdater(target: BrowserWindow): void {
       transferred: p.transferred,
       total: p.total,
     });
+    if (onDownloadProgress) onDownloadProgress(p.percent);
   });
 
   autoUpdater.on('update-downloaded', (info: UpdateInfo) => {

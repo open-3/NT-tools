@@ -453,6 +453,37 @@ kbd {
   color: #8b939e;
 }
 
+/* ---------- 更新进度条 ---------- */
+.p-update-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+.p-update-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.p-update-fill {
+  height: 100%;
+  width: 0; /* JS 按下载进度动态设 style.width（CSP 禁内联 style 属性） */
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3ddc97, #4c8dff);
+  transition: width 0.15s linear;
+}
+.p-update-text {
+  flex: none;
+  font-size: 10px;
+  color: #8ab4ff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+}
+
 /* ---------- 空态 ---------- */
 .p-empty {
   height: 74px;
