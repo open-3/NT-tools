@@ -72,15 +72,17 @@ async function doCheckAndUpdate(isManual: boolean): Promise<void> {
 
   try {
     send(isManual ? { state: 'not-available', message: '检查中…' } : { state: 'not-available' });
-    const info = await autoUpdater.checkForUpdates();
+    const result = await autoUpdater.checkForUpdates();
 
-    if (!info) {
+    // 关键：checkForUpdates 永远返回非 null 对象，是否真的有更新
+    // 要看 result.isUpdateAvailable 字段；返回 null 只在 updater 被禁用时出现。
+    // 之前误判成「返回 null = 无更新」，导致同版本也被当成有更新。
+    if (!result || !result.isUpdateAvailable) {
       send({ state: 'not-available', message: isManual ? '已是最新版本' : undefined });
       return;
     }
 
-    // info.updateInfo 是 UpdateInfo；downloaded 时已就绪
-    const update = info.updateInfo;
+    const update = result.updateInfo;
     send({ state: 'available', version: update.version });
 
     // 手动检查直接弹框；自动检查只在首次弹
@@ -94,9 +96,8 @@ async function doCheckAndUpdate(isManual: boolean): Promise<void> {
     }
 
     await autoUpdater.downloadUpdate();
-    // 下载完成后 downloadUpdate 会 resolve；真实安装由 quitAndInstall 触发
-    send({ state: 'downloaded', version: update.version });
-    promptInstall(update.version);
+    // 下载完成会触发 'update-downloaded' 事件，在那里提示重启安装；
+    // 这里不再手动弹框，避免和事件重复弹两次。
   } catch (e: any) {
     send({ state: 'error', message: e?.message ?? String(e) });
   }
