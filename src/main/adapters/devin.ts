@@ -118,7 +118,7 @@ function extractMessageText(m: any): string {
 export class DevinAdapter implements AgentAdapter {
   readonly id = 'devin';
   readonly label = 'Devin';
-  readonly badge = 'D';
+  readonly badge = 'V'; // "deVin" 的 v；D 已被 DeepSeek Harness 占用
 
   detect(): boolean {
     return fs.existsSync(DEVIN_DB);

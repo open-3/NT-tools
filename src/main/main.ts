@@ -12,7 +12,7 @@ import { AutoCollapse } from './autocollapse';
 import { readQuota } from './quota';
 import { QuotaState } from './adapters/types';
 import { showToolboxMenu, installToolIpc } from './tools';
-import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener, setUpdaterProgressListener } from './updater';
+import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener, setUpdaterProgressListener, downloadNow } from './updater';
 
 const WIDTH = 362;
 const HEADER_H = 42;
@@ -421,11 +421,15 @@ function buildTrayMenu(): void {
     },
     { type: 'separator' },
     {
-      // 有已知新版本时，菜单项醒目标注；否则显示「检查更新」
+      // 有已知新版本时，菜单项醒目标注，点击直接下载；
+      // 否则显示「检查更新」，点击触发一次检查
       label: getAvailableVersion()
         ? `🆕 发现新版本 ${getAvailableVersion()}（点击更新）`
         : `检查更新（当前 v${app.getVersion()}）`,
-      click: () => checkForUpdates(),
+      click: () => {
+        if (getAvailableVersion()) void downloadNow();
+        else checkForUpdates();
+      },
     },
     { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } },

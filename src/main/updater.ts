@@ -35,6 +35,8 @@ let latestAvailableVersion: string | null = null;
 let onStateChange: (() => void) | null = null;
 /** 下载进度回调（下载百分比变化时触发，main.ts 用它更新托盘 tooltip） */
 let onDownloadProgress: ((percent: number) => void) | null = null;
+/** 是否正在下载（防重入：下载中再点「更新」不重复触发） */
+let downloading = false;
 
 function notifyStateChange(): void {
   if (onStateChange) onStateChange();
@@ -162,6 +164,8 @@ export function checkForUpdates(): void {
 /** 胶囊「↑ 更新」按钮：直接下载已知的新版本，不再弹确认框 */
 export async function downloadNow(): Promise<void> {
   if (!app.isPackaged) return;
+  if (downloading) return; // 已在下载，防重入
+  downloading = true;
   try {
     // 确保有过一次检查，拿到 updateInfoAndProvider
     const result = await autoUpdater.checkForUpdates();
@@ -175,6 +179,8 @@ export async function downloadNow(): Promise<void> {
     await autoUpdater.downloadUpdate();
   } catch (e: any) {
     send({ state: 'error', message: e?.message ?? String(e) });
+  } finally {
+    downloading = false;
   }
 }
 
