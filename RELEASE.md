@@ -10,6 +10,11 @@
 - 代码已提交、工作区干净
 - 能访问 github.com（本机走 Clash 代理，git 已配好 `http.proxy=7897`）
 
+> 🚨 **最关键的坑（踩过两次）**：`dist/` 被 `.gitignore` 排除，
+> **不进版本控制**。所以「源码改了 → 提交了」≠「dist 里的产物是最新的」。
+> 每次发布前必须 `npm run build`，否则打包进 installer 的是旧的 dist，
+> 客户端「升级」后还是旧代码（曾因此把带 bug 的 0.1.1 发出去，只能再升 0.1.2 补发）。
+
 ---
 
 ## 一、改版本号
@@ -41,12 +46,16 @@ git commit -m "chore: 版本号升级到 0.1.1"
 ```bash
 $env:GH_TOKEN = "github_pat_xxxxxxxxxxxxxxxx"
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npm run build   # ← 必须先 build，把最新源码编译进 dist
 npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publish always
 ```
 
 > ⚠️ **必须加 `--config.win.signAndEditExecutable=false`**。
 > 本机没有代码签名证书，不跳过签名会在 signApp 步骤崩溃
 > （`app-builder.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE`）。
+>
+> ⚠️ **必须 `npm run build` 后再 `electron-builder`**。
+> dist 不进 git，直接跑 electron-builder 会打进旧代码（见「前置条件」的坑）。
 
 `--publish always` 会自动：
 1. 构建 NSIS installer
@@ -57,6 +66,7 @@ npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publ
 
 1. 本地打包（不发布）：
    ```bash
+   npm run build
    npx electron-builder --win --x64 --config.win.signAndEditExecutable=false
    ```
 2. 到 GitHub 仓库 → Releases → Draft a new release
@@ -137,6 +147,20 @@ portable 每次运行解压到临时目录，无法原地更新（更新后重�
 installer 有固定安装路径（`%LOCALAPPDATA%\Programs\agent-pulse`），
 electron-updater 才能做增量替换。这是换发行形态的根本原因。
 
+### Q: 客户端提示「发现新版本 0.1.x」，但当前版本已经是 0.1.x？
+
+两种情况，分别排查：
+
+1. **发包时漏了 `npm run build`**（最常见）。dist 进不了 git，
+   直接 electron-builder 会打进旧代码，客户端「升级」后还是旧逻辑。
+   解法：重新 `npm run build` 后升版本号（如 0.1.2）重新发布一次。
+
+2. **代码 bug**：updater 判断逻辑用错了字段。electron-updater 的
+   `checkForUpdates()` 永远返回非 null 对象，是否更新要看
+   `result.isUpdateAvailable`，不能拿「返回是否 null」来判断。
+
+升级到修复版之后，再点检查更新才会正确返回「已是最新版本」。
+
 ---
 
 ## 相关文件
@@ -147,3 +171,5 @@ electron-updater 才能做增量替换。这是换发行形态的根本原因。
 | `package.json` 的 `build.publish` | 更新源仓库配置 |
 | `package.json` 的 `build.nsis` | 安装包配置（oneClick、快捷方式） |
 | `scripts/build-main.mjs` | electron-updater 设为 external |
+| `dist/` | 打包产物，**被 gitignore**，发布前必须重新 build |
+| `release/` | electron-builder 输出（exe + latest.yml + blockmap） |
