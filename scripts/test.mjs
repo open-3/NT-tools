@@ -12,6 +12,7 @@ const suites = [
   { src: 'scripts/test-dsh-e2e.ts', out: 'dist/test-dsh.cjs' },
   { src: 'scripts/test-codex-e2e.ts', out: 'dist/test-codex.cjs' },
   { src: 'scripts/test-workbuddy-e2e.ts', out: 'dist/test-wb.cjs' },
+  { src: 'scripts/test-devin-e2e.ts', out: 'dist/test-devin.cjs' },
   { src: 'scripts/test-summary.ts', out: 'dist/test-sum.cjs' },
   { src: 'scripts/test-project.ts', out: 'dist/test-proj.cjs' },
   { src: 'scripts/test-quota.ts', out: 'dist/test-quota.cjs' },

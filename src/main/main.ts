@@ -5,6 +5,7 @@ import { Store } from './store';
 import { CodexAdapter } from './adapters/codex';
 import { DshAdapter } from './adapters/dsh';
 import { WorkBuddyAdapter } from './adapters/workbuddy';
+import { DevinAdapter } from './adapters/devin';
 import { AgentAdapter, AgentSession, SourceStatus } from './adapters/types';
 import { reconcile, sameSnapshot, ViewSnapshot } from './reconcile';
 import { AutoCollapse } from './autocollapse';
@@ -51,7 +52,7 @@ let lastRenderedHeight = 0;
 let quotaCache: QuotaState | undefined;
 let quotaTimer: NodeJS.Timeout | null = null;
 
-const adapters: AgentAdapter[] = [new CodexAdapter(), new DshAdapter(), new WorkBuddyAdapter()];
+const adapters: AgentAdapter[] = [new CodexAdapter(), new DshAdapter(), new WorkBuddyAdapter(), new DevinAdapter()];
 
 /* ------------------------------------------------------------------ */
 /* 采集                                                                */
