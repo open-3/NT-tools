@@ -39,10 +39,14 @@ git commit -m "chore: 版本号升级到 0.1.1"
 **方式 A：一条命令（推荐，需要 GitHub Token）**
 
 ```bash
-$env:GH_TOKEN = "ghp_xxxxxxxxxxxxxxxx"
+$env:GH_TOKEN = "github_pat_xxxxxxxxxxxxxxxx"
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-npx electron-builder --win --x64 --publish always
+npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publish always
 ```
+
+> ⚠️ **必须加 `--config.win.signAndEditExecutable=false`**。
+> 本机没有代码签名证书，不跳过签名会在 signApp 步骤崩溃
+> （`app-builder.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE`）。
 
 `--publish always` 会自动：
 1. 构建 NSIS installer
@@ -53,7 +57,7 @@ npx electron-builder --win --x64 --publish always
 
 1. 本地打包（不发布）：
    ```bash
-   npx electron-builder --win --x64
+   npx electron-builder --win --x64 --config.win.signAndEditExecutable=false
    ```
 2. 到 GitHub 仓库 → Releases → Draft a new release
 3. Tag 填 `v0.1.1`（**必须带 v 前缀**，electron-updater 按这个找）
@@ -68,7 +72,35 @@ npx electron-builder --win --x64 --publish always
 
 ---
 
-## 三、验证
+## 三、⚠️ 把 Draft 转为正式发布（必做，最容易漏）
+
+electron-builder 的 `--publish always` 默认创建的是 **Draft（草稿）** Release，
+草稿状态下客户端**下载不到 latest.yml**（404），等于没发布。
+
+发完版后，必须去 GitHub 把 Draft 转成正式发布：
+
+1. 打开 https://github.com/open-3/NT-tools/releases
+2. 找到刚建的 `v0.1.1`（标着 **Draft**）
+3. 点它 → 编辑 → 底部 **「Publish release」** 按钮
+
+或走 API（需要 Token）：
+
+```bash
+# 找到 draft release 的 id 后：
+$h = @{ Authorization = "Bearer $env:GH_TOKEN"; "User-Agent" = "agent-pulse" }
+$rels = Invoke-RestMethod "https://api.github.com/repos/open-3/NT-tools/releases" -Headers $h
+$rel = $rels | Where-Object { $_.tag_name -eq "v0.1.1" }
+$body = @{ draft = $false } | ConvertTo-Json
+Invoke-RestMethod "https://api.github.com/repos/open-3/NT-tools/releases/$($rel.id)" -Method Patch -Headers $h -Body $body -ContentType "application/json"
+```
+
+> 验证是否生效：浏览器直接开
+> `https://github.com/open-3/NT-tools/releases/download/v0.1.1/latest.yml`
+> 能下载到内容（HTTP 200）就说明正式发布了。
+
+---
+
+## 四、验证
 
 旧版本客户端启动后（8 秒静默检查或托盘「检查更新」），会：
 
