@@ -188,9 +188,15 @@ export function initUpdater(target: BrowserWindow): void {
     send({ state: 'error', message: e.message });
   });
 
-  // 启动后延迟几秒静默检查，避免和启动抢资源
+  // 启动后延迟几秒静默检查一次，然后每 1 小时周期检查一次。
+  // 之前只查一次（setTimeout 一次性），应用常驻时不会自动发现新版本。
+  // 用 setInterval 循环，首个间隔 8 秒后触发、之后每小时。
+  const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 小时
   setTimeout(() => {
     void doCheckAndUpdate(false);
+    setInterval(() => {
+      void doCheckAndUpdate(false);
+    }, CHECK_INTERVAL_MS);
   }, 8000);
 }
 
@@ -199,10 +205,44 @@ export function checkForUpdates(): void {
   void doCheckAndUpdate(true);
 }
 
+/** 胶囊「↑ 更新」按钮：直接下载已知的新版本，不再弹确认框 */
+export async function downloadNow(): Promise<void> {
+  if (!app.isPackaged) return;
+  try {
+    // 确保有过一次检查，拿到 updateInfoAndProvider
+    const result = await autoUpdater.checkForUpdates();
+    if (!result || !result.isUpdateAvailable) {
+      send({ state: 'not-available', message: '已是最新版本' });
+      return;
+    }
+    latestAvailableVersion = result.updateInfo.version;
+    notifyStateChange();
+    // 直接下载，下载进度事件会驱动胶囊显示百分比
+    await autoUpdater.downloadUpdate();
+  } catch (e: any) {
+    send({ state: 'error', message: e?.message ?? String(e) });
+  }
+}
+
+/** 胶囊「点击重启」按钮：立即重启并安装已下载的更新 */
+export function restartNow(): void {
+  autoUpdater.quitAndInstall(false, true);
+}
+
 /** 下载进度查询（renderer 问进度时回复最新事件） */
 export function installUpdaterIpc(): void {
   ipcMain.handle('pulse:check-update', () => {
     checkForUpdates();
     return true;
+  });
+
+  // 胶囊「↑ 更新」按钮 → 直接下载
+  ipcMain.on('pulse:update-now', () => {
+    void downloadNow();
+  });
+
+  // 胶囊「点击重启」按钮 → 重启安装
+  ipcMain.on('pulse:update-restart', () => {
+    restartNow();
   });
 }

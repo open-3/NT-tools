@@ -57,6 +57,8 @@ declare global {
       onUpdate(cb: (s: Snapshot) => void): void;
       onState(cb: (s: { alwaysOnTop: boolean; collapsed: boolean }) => void): void;
       onUpdateEvent(cb: (s: UpdateEvent) => void): void;
+      updateNow(): void;
+      updateRestart(): void;
     };
   }
 }
@@ -78,8 +80,8 @@ let breatheTimer: number | null = null;
 let breatheOn = false;
 /** 完成未读是否已展开（默认折叠） */
 let doneExpanded = false;
-/** 更新下载状态（进度条数据），null 表示无进行中的更新 */
-let updateStatus: { state: string; percent: number; message?: string } | null = null;
+/** 更新下载状态（胶囊徽章数据），null 表示无进行中的更新 */
+let updateStatus: { phase: 'available' | 'downloading' | 'downloaded'; version?: string; percent: number } | null = null;
 
 /* ---------------- 工具 ---------------- */
 
@@ -306,28 +308,25 @@ function renderFull(snap: Snapshot): string {
 }
 
 /**
- * 更新下载进度条：仅在「正在下载」时显示，下载完/出错/无更新时隐藏。
- * 是一根细进度条 + 百分比文字。
- * 注意：宽度不用内联 style（CSP style-src 'self' 会拦），
- * 由 paint 渲染后用 JS 设 fill 的 style.width。
+ * 更新胶囊徽章：三态显示，对齐参考截图的设计。
+ *   - available：  「↑ 更新」            （可点击 → 立即下载）
+ *   - downloading：「↑ 正在下载... X%」  （不可点）
+ *   - downloaded： 「点击重启」           （可点击 → 重启安装）
  */
 function updateBarHtml(): string {
   if (!updateStatus) return '';
   const pct = Math.max(0, Math.min(100, Math.round(updateStatus.percent ?? 0)));
-  return `
-    <div class="p-update-bar">
-      <div class="p-update-track"><div class="p-update-fill" data-update-fill></div></div>
-      <span class="p-update-text">更新 ${pct}%</span>
-    </div>`;
-}
 
-/** paint 渲染后，用 JS 设进度条宽度（绕过 CSP 对内联 style 的限制） */
-function applyUpdateBarWidth(): void {
-  const fill = root.querySelector('.p-update-fill') as HTMLElement | null;
-  if (fill && updateStatus) {
-    const pct = Math.max(0, Math.min(100, Math.round(updateStatus.percent ?? 0)));
-    fill.style.width = pct + '%';
+  if (updateStatus.phase === 'available') {
+    return `<div class="p-update-pill p-update-act" data-act="update-now"><span class="p-update-arrow">↑</span>更新</div>`;
   }
+  if (updateStatus.phase === 'downloading') {
+    return `<div class="p-update-pill"><span class="p-update-arrow">↑</span>正在下载... ${pct}%</div>`;
+  }
+  if (updateStatus.phase === 'downloaded') {
+    return `<div class="p-update-pill p-update-act" data-act="update-restart"><span class="p-update-arrow">↻</span>点击重启</div>`;
+  }
+  return '';
 }
 
 /**
@@ -422,6 +421,10 @@ function handleClick(e: MouseEvent): void {
     } else if (a === 'toggleDone') {
       doneExpanded = !doneExpanded;
       if (snapshot) paint(snapshot);
+    } else if (a === 'update-now') {
+      window.pulse.updateNow();
+    } else if (a === 'update-restart') {
+      window.pulse.updateRestart();
     }
     return;
   }
@@ -453,7 +456,6 @@ function handleContextMenu(e: MouseEvent): void {
 function paint(snap: Snapshot): void {
   snapshot = snap;
   root.innerHTML = collapsed ? renderMini(snap) : renderFull(snap);
-  applyUpdateBarWidth();
   syncHeight();
 }
 
@@ -475,14 +477,19 @@ async function boot(): Promise<void> {
     if (snapshot) paint(snapshot);
   });
 
-  // 更新事件：下载进度 → 显示进度条；其他状态 → 隐藏进度条
+  // 更新事件：映射到胶囊三态（available / downloading / downloaded）
   window.pulse.onUpdateEvent((e: UpdateEvent) => {
-    if (e.state === 'downloading') {
-      updateStatus = { state: 'downloading', percent: e.percent ?? 0 };
+    if (e.state === 'available') {
+      updateStatus = { phase: 'available', version: e.version, percent: 0 };
+    } else if (e.state === 'downloading') {
+      updateStatus = { phase: 'downloading', version: e.version, percent: e.percent ?? 0 };
+    } else if (e.state === 'downloaded') {
+      updateStatus = { phase: 'downloaded', version: e.version, percent: 100 };
     } else {
+      // not-available / error：清掉胶囊
       updateStatus = null;
     }
-    // 进度条出现/消失会改变窗口高度，重画一次
+    // 胶囊出现/消失会改变窗口高度，重画一次
     if (snapshot) paint(snapshot);
   });
 
