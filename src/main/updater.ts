@@ -8,10 +8,11 @@ import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
  * electron-updater 依赖固定安装路径做增量更新；portable 每次解压到临时目录，
  * 更新后重启就丢。所以本项目把发行形态从 portable 改成了 installer。
  *
- * 更新流程：
- *   1. 启动时静默 checkForUpdates，发现新版 → 弹对话框问用户是否更新
- *   2. 用户确认 → 下载 → 校验 → 提示重启安装
- *   3. 托盘菜单提供「检查更新」手动入口
+ * 更新流程（胶囊徽章是唯一更新入口，不弹原生「发现新版本」对话框）：
+ *   1. 启动后 + 每 1 小时周期检查，发现新版 → 浮窗显示「↑ 更新」胶囊
+ *   2. 用户点胶囊 → 下载 → 胶囊实时显示「正在下载 x%」
+ *   3. 下载完成 → 胶囊变「点击重启」→ 点击重启安装
+ *   4. 托盘菜单的「检查更新」提供手动触发；无新版时弹「已是最新版本」
  *
  * 更新元数据从 package.json 的 build.publish（GitHub Releases open-3/NT-tools）读取。
  * 开发者用 electron-builder --publish 发布时，会生成 latest.yml 供客户端比对。
@@ -28,8 +29,6 @@ interface UpdateEventPayload {
 }
 
 let win: BrowserWindow | null = null;
-let manualPrompting = false;
-let autoPromptShown = false;
 /** 已知可用的新版本号（发现新版时记录，供托盘菜单显示「有新版本」提示） */
 let latestAvailableVersion: string | null = null;
 /** 更新状态变化回调（发现新版/无新版时触发，main.ts 用它重建托盘菜单） */
@@ -63,23 +62,10 @@ export function setUpdaterProgressListener(cb: (percent: number) => void): void 
 }
 
 /**
- * 弹「发现新版本」对话框，返回用户是否要现在更新。
- * 启动时的静默检查只弹一次；手动检查每次都弹。
+ * 弹「发现新版本」对话框 —— 已移除。
+ * 更新交互改为浮窗胶囊徽章（↑更新 / ↑正在下载 x% / 点击重启），
+ * 胶囊是唯一更新入口，不再弹原生「发现新版本」对话框，避免重复打扰。
  */
-async function promptUpdate(info: UpdateInfo): Promise<boolean> {
-  if (!win) return false;
-  win.show();
-  const { response } = await dialog.showMessageBox(win, {
-    type: 'info',
-    title: '发现新版本',
-    message: `发现新版本 ${info.version}`,
-    detail: `当前版本 ${app.getVersion()}\n\n是否立即下载更新？`,
-    buttons: ['立即更新', '稍后'],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  return response === 0;
-}
 
 async function doCheckAndUpdate(isManual: boolean): Promise<void> {
   // 开发态（未打包）没有有效的更新通道，直接提示不可用
@@ -94,57 +80,24 @@ async function doCheckAndUpdate(isManual: boolean): Promise<void> {
 
     // 关键：checkForUpdates 永远返回非 null 对象，是否真的有更新
     // 要看 result.isUpdateAvailable 字段；返回 null 只在 updater 被禁用时出现。
-    // 之前误判成「返回 null = 无更新」，导致同版本也被当成有更新。
     if (!result || !result.isUpdateAvailable) {
       latestAvailableVersion = null;
       send({ state: 'not-available', message: isManual ? '已是最新版本' : undefined });
       notifyStateChange();
-      // 手动检查且无新版：弹原生对话框给个明确反馈（否则点了没反应）
+      // 手动检查且无新版：弹一次「已是最新版本」明确反馈
       if (isManual) showNoUpdate();
       return;
     }
 
+    // 发现新版：只记录 + 发 available 事件（胶囊显示「↑ 更新」），
+    // 不自动下载、不弹框，等用户点胶囊才 downloadNow。
     const update = result.updateInfo;
     latestAvailableVersion = update.version;
     send({ state: 'available', version: update.version });
     notifyStateChange();
-
-    // 手动检查直接弹框；自动检查只在首次弹
-    const shouldPrompt = isManual ? true : !autoPromptShown;
-    if (shouldPrompt && !manualPrompting) {
-      manualPrompting = true;
-      autoPromptShown = true;
-      const ok = await promptUpdate(update);
-      manualPrompting = false;
-      if (!ok) return; // 用户选「稍后」
-    }
-
-    await autoUpdater.downloadUpdate();
-    // 下载完成会触发 'update-downloaded' 事件，在那里提示重启安装；
-    // 这里不再手动弹框，避免和事件重复弹两次。
   } catch (e: any) {
     send({ state: 'error', message: e?.message ?? String(e) });
   }
-}
-
-function promptInstall(version: string): void {
-  if (!win) return;
-  win.show();
-  dialog
-    .showMessageBox(win, {
-      type: 'info',
-      title: '更新已下载',
-      message: `新版本 ${version} 已下载完成`,
-      detail: '重启应用即可完成安装。现在重启吗？',
-      buttons: ['立即重启安装', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-    })
-    .then(({ response }) => {
-      if (response === 0) {
-        autoUpdater.quitAndInstall(false, true);
-      }
-    });
 }
 
 /** 手动检查时无新版：弹一次明确的「已是最新版本」提示，避免点击无反馈 */
@@ -180,8 +133,9 @@ export function initUpdater(target: BrowserWindow): void {
   });
 
   autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+    // 下载完成：发 downloaded 事件 → 胶囊显示「点击重启」；
+    // 不再弹原生对话框。
     send({ state: 'downloaded', version: info.version });
-    promptInstall(info.version);
   });
 
   autoUpdater.on('error', (e: Error) => {
