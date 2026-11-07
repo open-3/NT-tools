@@ -276,16 +276,13 @@ function renderFull(snap: Snapshot): string {
        </div>`
     : doneItems.map(renderItem).join('');
 
-  const sourceNote = snap.sources
-    .filter((s) => !s.ok)
-    .map((s) => `未检测到 ${esc(s.label)}`)
-    .join(' · ');
-
   const listHtml = activeHtml + doneHtml;
 
+  // 空态：探测是自动的、静默的，不把「未检测到 XX」这种内部状态暴露给用户。
+  // 工具没装是常态，不是错误；统一给一个中性文案即可。
   const body =
     snap.items.length === 0
-      ? `<div class="p-empty"><div class="ring"></div>${sourceNote || '暂无进行中的对话'}</div>`
+      ? `<div class="p-empty"><div class="ring"></div>暂无进行中的对话</div>`
       : `<div class="p-list">${listHtml}</div>`;
 
   const footer =
