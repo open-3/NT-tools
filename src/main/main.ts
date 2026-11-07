@@ -11,7 +11,7 @@ import { AutoCollapse } from './autocollapse';
 import { readQuota } from './quota';
 import { QuotaState } from './adapters/types';
 import { showToolboxMenu, installToolIpc } from './tools';
-import { initUpdater, checkForUpdates, installUpdaterIpc } from './updater';
+import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener } from './updater';
 
 const WIDTH = 362;
 const HEADER_H = 42;
@@ -420,7 +420,10 @@ function buildTrayMenu(): void {
     },
     { type: 'separator' },
     {
-      label: `检查更新（当前 v${app.getVersion()}）`,
+      // 有已知新版本时，菜单项醒目标注；否则显示「检查更新」
+      label: getAvailableVersion()
+        ? `🆕 发现新版本 ${getAvailableVersion()}（点击更新）`
+        : `检查更新（当前 v${app.getVersion()}）`,
       click: () => checkForUpdates(),
     },
     { type: 'separator' },
@@ -675,6 +678,10 @@ if (!gotLock) {
 
     // 远程更新：启动后静默检查（内部延迟 8 秒）
     if (win) initUpdater(win);
+
+    // 更新状态变化（发现新版/无新版）时重建托盘菜单，让「检查更新」项
+    // 动态显示「🆕 发现新版本 X」
+    setUpdaterStateListener(() => buildTrayMenu());
 
     tray = new Tray(trayIcon(false));
     tray.setToolTip('Agent Pulse');

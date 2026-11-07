@@ -30,6 +30,14 @@ interface UpdateEventPayload {
 let win: BrowserWindow | null = null;
 let manualPrompting = false;
 let autoPromptShown = false;
+/** 已知可用的新版本号（发现新版时记录，供托盘菜单显示「有新版本」提示） */
+let latestAvailableVersion: string | null = null;
+/** 更新状态变化回调（发现新版/无新版时触发，main.ts 用它重建托盘菜单） */
+let onStateChange: (() => void) | null = null;
+
+function notifyStateChange(): void {
+  if (onStateChange) onStateChange();
+}
 
 function send(payload: UpdateEventPayload): void {
   if (win && !win.isDestroyed()) {
@@ -37,11 +45,14 @@ function send(payload: UpdateEventPayload): void {
   }
 }
 
-/** 人性化的速度显示 */
-function humanSpeed(bytesPerSecond: number): string {
-  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
-  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(0)} KB/s`;
-  return `${bytesPerSecond} B/s`;
+/** 供 main.ts 查询：当前是否有已知的新版本（用于托盘菜单动态显示） */
+export function getAvailableVersion(): string | null {
+  return latestAvailableVersion;
+}
+
+/** 供 main.ts 注册：更新状态变化时重建托盘菜单 */
+export function setUpdaterStateListener(cb: () => void): void {
+  onStateChange = cb;
 }
 
 /**
@@ -78,12 +89,18 @@ async function doCheckAndUpdate(isManual: boolean): Promise<void> {
     // 要看 result.isUpdateAvailable 字段；返回 null 只在 updater 被禁用时出现。
     // 之前误判成「返回 null = 无更新」，导致同版本也被当成有更新。
     if (!result || !result.isUpdateAvailable) {
+      latestAvailableVersion = null;
       send({ state: 'not-available', message: isManual ? '已是最新版本' : undefined });
+      notifyStateChange();
+      // 手动检查且无新版：弹原生对话框给个明确反馈（否则点了没反应）
+      if (isManual) showNoUpdate();
       return;
     }
 
     const update = result.updateInfo;
+    latestAvailableVersion = update.version;
     send({ state: 'available', version: update.version });
+    notifyStateChange();
 
     // 手动检查直接弹框；自动检查只在首次弹
     const shouldPrompt = isManual ? true : !autoPromptShown;
@@ -121,6 +138,20 @@ function promptInstall(version: string): void {
         autoUpdater.quitAndInstall(false, true);
       }
     });
+}
+
+/** 手动检查时无新版：弹一次明确的「已是最新版本」提示，避免点击无反馈 */
+function showNoUpdate(): void {
+  if (!win) return;
+  win.show();
+  void dialog.showMessageBox(win, {
+    type: 'info',
+    title: '检查更新',
+    message: '已是最新版本',
+    detail: `当前版本 ${app.getVersion()} 已是最新，无需更新。`,
+    buttons: ['好的'],
+    defaultId: 0,
+  });
 }
 
 /** 初始化：注册进度事件 + 启动时静默检查 */
