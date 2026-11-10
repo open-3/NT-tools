@@ -53,7 +53,7 @@ export interface ToolNetstatResult {
 }
 
 export interface ToolApi {
-  openFile(): Promise<ToolOpenResult | null>;
+  openFile(defaultPath?: string): Promise<ToolOpenResult | null>;
   saveFile(filePath: string, content: string): Promise<ToolSaveResult>;
   saveFileAs(defaultName: string, content: string): Promise<ToolSaveResult | null>;
   readBinaryFile(): Promise<ToolBinaryResult | null>;

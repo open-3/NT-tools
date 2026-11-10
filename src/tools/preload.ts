@@ -13,7 +13,7 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 contextBridge.exposeInMainWorld('tool', {
   // 文本文件
-  openFile: () => ipcRenderer.invoke('tool:openFile'),
+  openFile: (defaultPath?: string) => ipcRenderer.invoke('tool:openFile', defaultPath),
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('tool:saveFile', filePath, content),
   saveFileAs: (defaultName: string, content: string) =>
     ipcRenderer.invoke('tool:saveFileAs', defaultName, content),

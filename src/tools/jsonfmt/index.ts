@@ -337,7 +337,7 @@ function doFormat(): void {
 }
 
 async function doOpen(): Promise<void> {
-  const r = await window.tool.openFile();
+  const r = await window.tool.openFile(currentPath ?? undefined);
   if (!r) return;
   if (r.error) {
     setStatus(`打开失败：${r.error}`, true);

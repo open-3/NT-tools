@@ -184,11 +184,15 @@ const FILE_FILTERS = [
 ];
 
 export function installToolIpc(): void {
-  ipcMain.handle('tool:openFile', async (): Promise<OpenResult | null> => {
-    const r = await dialog.showOpenDialog({
+  ipcMain.handle('tool:openFile', async (_e, defaultPath?: string): Promise<OpenResult | null> => {
+    const opts: Electron.OpenDialogOptions = {
       properties: ['openFile'],
       filters: FILE_FILTERS,
-    });
+    };
+    if (typeof defaultPath === 'string' && defaultPath) {
+      opts.defaultPath = defaultPath;
+    }
+    const r = await dialog.showOpenDialog(opts);
     if (r.canceled || !r.filePaths.length) return null;
     const p = r.filePaths[0];
     try {
