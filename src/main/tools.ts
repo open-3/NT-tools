@@ -73,6 +73,13 @@ function toolPreload(): string {
   return path.join(__dirname, '..', 'tools', 'preload.js');
 }
 
+/** 工具窗口独立图标（程序化生成的彩色圆角方块，见 scripts/gen-tool-icons.py） */
+function toolIconPath(id: string): string {
+  // 构建时 build/icons/*.ico 拷到 dist/icons/，随 asar 打包；Electron 可透明读 asar 内路径。
+  // 用 ICO（含 16~256 多尺寸）而非 PNG：Windows 下 ICO 对标题栏/任务栏效果最佳（官方推荐）。
+  return path.join(__dirname, '..', 'icons', `${id}.ico`);
+}
+
 export function openTool(toolId: string): void {
   const def = TOOLS.find((t) => t.id === toolId);
   if (!def) return;
@@ -97,6 +104,7 @@ export function openTool(toolId: string): void {
     minHeight: 300,
     title: def.label,
     autoHideMenuBar: true,
+    icon: toolIconPath(def.id),
     // 与工具页 (#ffffff) 一致，避免打开时闪一下深色
     backgroundColor: '#ffffff',
     show: false,

@@ -142,4 +142,21 @@ for (const id of toolIds) {
   if (deps) console.log(`[build] ${id}: +${deps} runtime files`);
 }
 
+/* ---- 工具窗口图标：程序化生成的圆角方块，拷到 dist/icons 随 asar 打包 ---- */
+const iconsSrc = path.join(root, 'build', 'icons');
+const iconsOut = path.join(root, 'dist', 'icons');
+if (fs.existsSync(iconsSrc)) {
+  fs.rmSync(iconsOut, { recursive: true, force: true });
+  fs.mkdirSync(iconsOut, { recursive: true });
+  let n = 0;
+  for (const f of fs.readdirSync(iconsSrc)) {
+    if (!f.endsWith('.ico')) continue;
+    fs.copyFileSync(path.join(iconsSrc, f), path.join(iconsOut, f));
+    n++;
+  }
+  console.log(`[build] icons ok (+${n} ico)`);
+} else {
+  console.warn('[build] build/icons 不存在，跳过工具图标拷贝');
+}
+
 console.log(`[build] renderer ok (+${toolIds.length} tools: ${toolIds.join(', ') || 'none'})`);
