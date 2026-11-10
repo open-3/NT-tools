@@ -43,19 +43,28 @@ git commit -m "chore: 版本号升级到 0.1.1"
 
 **方式 A：一条命令（推荐，需要 GitHub Token）**
 
-```bash
+```powershell
 $env:GH_TOKEN = "github_pat_xxxxxxxxxxxxxxxx"
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 npm run build   # ← 必须先 build，把最新源码编译进 dist
-npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publish always
+
+# 下面三个变量是本地打包的固定条件（见下方「7za shim 说明」）
+$env:HTTP_PROXY  = "http://127.0.0.1:7890"
+$env:HTTPS_PROXY = "http://127.0.0.1:7890"
+$env:USE_SYSTEM_7ZA = "true"
+$env:PATH = "D:\tools\7za-shim;$env:PATH"
+
+npx electron-builder --win --x64 --publish always
 ```
 
-> ⚠️ **必须加 `--config.win.signAndEditExecutable=false`**。
-> 本机没有代码签名证书，不跳过签名会在 signApp 步骤崩溃
-> （`app-builder.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE`）。
->
 > ⚠️ **必须 `npm run build` 后再 `electron-builder`**。
 > dist 不进 git，直接跑 electron-builder 会打进旧代码（见「前置条件」的坑）。
+>
+> ⚠️ **不要加 `--config.win.signAndEditExecutable=false`**（旧结论，已作废）。
+> 这个 flag 会连同禁用 rcedit 的 `--set-icon` 步骤，导致 exe 内嵌图标
+> **永远是 Electron 默认 atom 图**，改 `build/icon.ico` 无效。本机无签名证书时，
+> electron-builder 会在 `no signing info identified, signing is skipped` 优雅跳过签名，
+> 但 rcedit（嵌入图标 + 版本元数据）仍会正常执行，这正是我们需要的。
 
 `--publish always` 会自动：
 1. 构建 NSIS installer
@@ -65,9 +74,13 @@ npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publ
 **方式 B：手动发布（没有 Token 时）**
 
 1. 本地打包（不发布）：
-   ```bash
+   ```powershell
    npm run build
-   npx electron-builder --win --x64 --config.win.signAndEditExecutable=false
+   $env:HTTP_PROXY  = "http://127.0.0.1:7890"
+   $env:HTTPS_PROXY = "http://127.0.0.1:7890"
+   $env:USE_SYSTEM_7ZA = "true"
+   $env:PATH = "D:\tools\7za-shim;$env:PATH"
+   npx electron-builder --win --x64
    ```
 2. 到 GitHub 仓库 → Releases → Draft a new release
 3. Tag 填 `v0.1.1`（**必须带 v 前缀**，electron-updater 按这个找）
@@ -173,3 +186,27 @@ electron-updater 才能做增量替换。这是换发行形态的根本原因。
 | `scripts/build-main.mjs` | electron-updater 设为 external |
 | `dist/` | 打包产物，**被 gitignore**，发布前必须重新 build |
 | `release/` | electron-builder 输出（exe + latest.yml + blockmap） |
+
+---
+
+## 7za shim 说明（winCodeSign 符号链接修复）
+
+electron-builder 打包时会下载 `winCodeSign-2.6.0.7z` 解压出 rcedit。
+该 .7z 里 darwin 的 `libcrypto.dylib`/`libssl.dylib` 是 **符号链接**，
+Windows 无权限创建（普通用户无 `SeCreateSymbolicLinkPrivilege`），
+7za 解压报 `Cannot create symbolic link : 客户端没有所需的特权` 且 exit 2，
+导致 electron-builder 判下载失败、反复重试（每次换随机目录名）。
+
+Go 下载器 `app-builder.exe` 通过 `SZA_PATH` 定位 7za 并**强制附加 `-snld`**（创建符号链接）。
+解法是做一个 **7za.exe 转发 shim**，把参数转发给真实 7za 并在**末尾追加 `-snl-`**
+（`-snl-` 排最后会覆盖之前的 `-snld`，跳过符号链接，剩余真实文件正常解压）。
+
+已落地（`D:\tools\7za-shim\`）：
+
+- `7za-real.exe`：从 `node_modules\7zip-bin\win\x64\7za.exe` 复制的真实 7za。
+- `7za.exe`：C# 转发 shim（源码 `shim.cs`），用 `csc.exe` 编译，转发 args 并追加 `-snl-`。
+- 打包时设 `USE_SYSTEM_7ZA=true` 让 node 端 `getPath7za()` 返回裸 `"7za"`，
+  再把 `D:\tools\7za-shim` 前置进 `PATH`，Go 下载器和 NSIS 阶段就能找到 shim。
+
+> 一旦 winCodeSign 解压成功，会以稳定名 `winCodeSign-2.6.0` 缓存，
+> 之后打包不再触发下载，无需重复这些步骤（除非清空 electron-builder 缓存）。
