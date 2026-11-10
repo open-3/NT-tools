@@ -1,6 +1,6 @@
 {
   "name": "agent-pulse",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "并发 Agent 状态浮窗 — 只读聚合 Codex / DeepSeek Harness / WorkBuddy 的进行中与未确认会话",
   "license": "MIT",
@@ -67,8 +67,15 @@
     }
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "codemirror": "^6.0.2",
     "electron-updater": "^6.8.11",
     "jsqr": "^1.4.0",
+    "monaco-editor": "^0.57.0",
     "qrcode": "^1.5.4",
     "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"

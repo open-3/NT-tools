@@ -6,13 +6,6 @@
   --t2: #57606a;
   --t3: #8b949e;
   --acc: #0969da;
-
-  /* 语法高亮：对齐 VS Code 浅色主题 */
-  --hl-key: #0451a5;
-  --hl-str: #a31515;
-  --hl-num: #098658;
-  --hl-lit: #0000ff;
-  --hl-punct: #3b3b3b;
 }
 
 * {
@@ -107,7 +100,7 @@ body {
   border-color: #0860ca;
 }
 
-/* ---------- 编辑区 ---------- */
+/* ---------- 编辑区（Monaco 挂载点） ---------- */
 .jb-main {
   flex: 1;
   min-height: 0;
@@ -116,7 +109,6 @@ body {
 }
 
 .jb-editor {
-  display: flex;
   flex: 1;
   min-width: 0;
   border: 1px solid var(--line);
@@ -127,135 +119,12 @@ body {
 .jb-editor:focus-within {
   border-color: #b6d4fe;
 }
-
-/*
- * 行号栏：每行 = 行号 + 折叠箭头（VS Code 式）。
- * padding / font-size / line-height 必须与 .jb-text 完全一致，否则错位。
- */
-.jb-gutter {
-  flex: none;
-  width: 62px;
-  padding: 8px 4px 8px 8px;
-  overflow: hidden;
-  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 20px;
-  user-select: none;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
-}
-
-.g-line {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  height: 20px;
-}
-.g-num {
-  color: var(--t3);
-  text-align: right;
-  min-width: 26px;
-}
-.g-arrow {
-  flex: none;
-  width: 13px;
-  text-align: center;
-  color: #999;
-  font-size: 10px;
-  cursor: pointer;
-}
-.g-arrow:hover {
-  color: var(--acc);
-}
-.g-arrow-none {
-  cursor: default;
-  pointer-events: none;
-}
-
-/* 代码区：高亮层 + 透明 textarea 叠加 */
-.jb-code {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.jb-highlight,
-.jb-text {
-  /* 两者必须完全同源排版，否则文字会错位 */
-  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 20px;
-  padding: 8px 12px;
-  margin: 0;
-  border: 0;
-  white-space: pre;
-  tab-size: 2;
-  letter-spacing: normal;
-  word-spacing: normal;
-}
-
-.jb-highlight {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  color: var(--hl-punct);
-  background: #fff;
-}
-
-.jb-text {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+/* Monaco 根容器填满挂载点 */
+.jb-editor .monaco-editor {
   height: 100%;
-  resize: none;
-  outline: none;
-  overflow: auto;
-  /* 文字透明，只显示光标和选区；真实颜色来自下方高亮层 */
-  color: transparent;
-  caret-color: #1f2328;
-  background: transparent;
 }
-/* 选区底色 + 选中文字可见。
- * 关键：.jb-text 的 color 是 transparent（色来自下方高亮层），
- * 若 ::selection 不显式给 color，选中时文字仍是透明，只剩一片浅蓝块、看不到字。
- * 这里让选中文字显形为深色，叠加浅蓝背景，对齐 VS Code 的选区体验。 */
-.jb-text::selection {
-  background: #c7dfff;
-  color: #1f2328;
-}
-.jb-text[readonly]::selection {
-  background: #d8e6f7;
-  color: #1f2328;
-}
-.jb-text[readonly] {
-  caret-color: transparent;
-}
-
-/* 语法高亮 token 配色 */
-.hl-key {
-  color: var(--hl-key);
-}
-.hl-str {
-  color: var(--hl-str);
-}
-.hl-num {
-  color: var(--hl-num);
-}
-.hl-lit {
-  color: var(--hl-lit);
-}
-.hl-punct {
-  color: var(--hl-punct);
-}
-
-/* 错误位置标记：红色波浪下划线 + 深红字符（对齐 VS Code 诊断样式） */
-.hl-err-mark {
-  color: #d02424;
-  text-decoration: underline wavy #e05555;
-  text-decoration-skip-ink: none;
+.jb-editor .monaco-editor .overflow-guard {
+  border-radius: 0;
 }
 
 /* ---------- 状态栏 ---------- */
@@ -275,12 +144,6 @@ body {
   align-items: center;
   gap: 10px;
 }
-.jb-status.err,
 #status.err {
   color: #cf222e;
-}
-.jb-foldhint {
-  color: var(--acc);
-  opacity: 0.85;
-  margin-left: auto;
 }

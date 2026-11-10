@@ -70,12 +70,21 @@ function copyRuntimeDeps(srcDir, outDir) {
       console.warn(`[build] 运行时依赖不存在，跳过: ${entry.from}`);
       continue;
     }
+    const target = entry.to ? path.join(outDir, entry.to) : outDir;
+
+    // recursive: true 时整目录树拷贝（如 Monaco 的 vs/ 目录，含大量子目录）
+    if (entry.recursive) {
+      fs.mkdirSync(target, { recursive: true });
+      fs.cpSync(fromDir, target, { recursive: true });
+      n += countFiles(fromDir);
+      continue;
+    }
+
     const include = entry.include ?? ['*'];
     // include 支持简单通配：完全匹配 或 *.ext
     const match = (name) =>
       include.some((pat) => (pat.startsWith('*.') ? name.endsWith(pat.slice(1)) : pat === name));
 
-    const target = entry.to ? path.join(outDir, entry.to) : outDir;
     fs.mkdirSync(target, { recursive: true });
 
     for (const f of fs.readdirSync(fromDir, { withFileTypes: true })) {
@@ -83,6 +92,15 @@ function copyRuntimeDeps(srcDir, outDir) {
       fs.copyFileSync(path.join(fromDir, f.name), path.join(target, f.name));
       n++;
     }
+  }
+  return n;
+}
+
+function countFiles(dir) {
+  let n = 0;
+  for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (f.isDirectory()) n += countFiles(path.join(dir, f.name));
+    else n++;
   }
   return n;
 }

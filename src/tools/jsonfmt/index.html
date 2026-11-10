@@ -2,12 +2,14 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; font-src 'self' data:;" />
     <title>JSON 格式化</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="vs/editor/editor.main.css" />
   </head>
   <body>
     <div id="app"></div>
+    <script src="vs/loader.js"></script>
     <script src="index.js"></script>
   </body>
 </html>
