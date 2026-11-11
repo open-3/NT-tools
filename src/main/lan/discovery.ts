@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { userDataPath } from './env';
 import { APP_ID, MULTICAST_ADDR, MULTICAST_PORT, HELLO_INTERVAL_MS, PEER_TIMEOUT_MS, LanHello } from './protocol';
 import { LanStore } from './store';
-import { listInterfaces, primaryIp as bestPrimaryIp } from './netif';
+import { listInterfaces, primaryIp as bestPrimaryIp, selectBestInterface } from './netif';
 
 /**
  * UDP 组播发现：每 3s 广播 hello，9s 无响应判离线。
@@ -122,7 +122,12 @@ export class Discovery {
         if (ips.size === 0) {
           sock.addMembership(MULTICAST_ADDR);
         } else {
-          const sendIp = this.nicOverride ?? [...ips][0];
+          // 发送出口：手动指定 > 智能选择（默认网关网卡）> 第一个候选。
+          // 不能用 [...ips][0]——Set 顺序来自 os.networkInterfaces()，若本机
+          // 还有一块「非虚拟非 APIPA」的以太网（插着网线但没走它上网），
+          // 排第一的可能不是真正在用的 WiFi，导致 hello 从错误网卡发出。
+          const preferred = selectBestInterface(this.nicOverride);
+          const sendIp = this.nicOverride ?? preferred?.address ?? [...ips][0];
           try {
             sock.setMulticastInterface(sendIp);
           } catch {
@@ -146,6 +151,7 @@ export class Discovery {
       app: APP_ID,
       id: this.selfId,
       name: this.selfName,
+      ip: bestPrimaryIp(),
       tcpPort: this.tcpPort,
       tsp: Date.now(),
     };
@@ -163,12 +169,16 @@ export class Discovery {
     if (!data || data.app !== APP_ID || data.type !== 'hello') return;
     if (data.id === this.selfId) return; // 自己（环回 / 其它网卡）
 
+    // 对端在 hello 里带的 ip 优先（真实通信地址），组播包源地址兜底。
+    // 若对端从错误网卡发出组播，源地址可能是 169.254.x，connect 会失败。
+    const peerIp = data.ip && /^\d+\.\d+\.\d+\.\d+$/.test(data.ip) ? data.ip : srcIp;
+
     const prev = this.peers.get(data.id);
     const online = prev?.online ?? false;
     const info: PeerInfo = {
       id: data.id,
       name: data.name || '未知设备',
-      ip: srcIp,
+      ip: peerIp,
       tcpPort: data.tcpPort,
       lastSeen: Date.now(),
       online: true,
