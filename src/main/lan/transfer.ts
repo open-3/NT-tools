@@ -62,12 +62,6 @@ export interface IncomingOffer {
   kind: 'file' | 'dir';
 }
 
-interface OutgoingRow {
-  peer: PeerInfo;
-  path: string;
-  size: number;
-}
-
 interface IncomingRow {
   peer: PeerInfo;
   savePath: string;
@@ -77,6 +71,16 @@ interface IncomingRow {
   localTransferId: number;
   /** 文件总大小（取自 file-offer 的 size 字段） */
   size: number;
+  /** 聊天区文件消息 id（receiveing 时先写入，finish 时更新状态） */
+  messageId: number;
+}
+
+interface OutgoingRow {
+  peer: PeerInfo;
+  path: string;
+  size: number;
+  /** 聊天区文件消息 id（offer 时写入，finish 时更新状态） */
+  messageId: number;
 }
 
 export class TransferService extends EventEmitter {
@@ -124,7 +128,7 @@ export class TransferService extends EventEmitter {
       path: filePath,
       ts: Date.now(),
     });
-    this.outgoing.set(transferId, { peer, path: filePath, size: stat.size });
+    this.outgoing.set(transferId, { peer, path: filePath, size: stat.size, messageId: 0 });
 
     await new Promise<void>((resolve, reject) => {
       this.chat.getOrConnect(peer, (err, socket) => {
@@ -144,15 +148,17 @@ export class TransferService extends EventEmitter {
           ts: Date.now(),
         };
         socket.write(encodeFrame(offer));
-        // 记录一条 out 文件消息，让对话框里能看到「已发送文件」
-        this.store.addMessage({
+        // 记录一条 out 文件消息（sending 状态），让对话框里能看到「发送中」
+        const messageId = this.store.addMessage({
           peerId: peer.id,
           dir: 'out',
           kind: 'file',
           text: `文件：${name}（${stat.size} 字节）`,
-          meta: JSON.stringify({ fileName: name, size: stat.size, transferId }),
+          meta: JSON.stringify({ fileName: name, size: stat.size, transferId, state: 'sending', path: filePath }),
           ts: Date.now(),
         });
+        const row = this.outgoing.get(transferId);
+        if (row) row.messageId = messageId;
         // 通知 UI 刷新聊天区，显示这条 out 文件消息
         this.emit('message', peer.id);
         resolve();
@@ -204,12 +210,24 @@ export class TransferService extends EventEmitter {
       this.chat.resumeFrames(socket);
       this.store.updateTransfer(transferId, { state: 'done' });
       this.emitProgress(transferId, t.peer.id, 'out', name, t.size, sent, 'done');
+      if (t.messageId) {
+        this.store.updateMessage(t.messageId, {
+          meta: JSON.stringify({ fileName: name, size: t.size, transferId, state: 'done', path: t.path }),
+        });
+        this.emit('message', t.peer.id);
+      }
       this.outgoing.delete(transferId);
     });
     rs.on('error', () => {
       this.chat.resumeFrames(socket);
       this.store.updateTransfer(transferId, { state: 'failed' });
       this.emitProgress(transferId, t.peer.id, 'out', name, t.size, sent, 'failed');
+      if (t.messageId) {
+        this.store.updateMessage(t.messageId, {
+          meta: JSON.stringify({ fileName: name, size: t.size, transferId, state: 'failed', path: t.path }),
+        });
+        this.emit('message', t.peer.id);
+      }
       this.outgoing.delete(transferId);
     });
   }
@@ -251,6 +269,7 @@ export class TransferService extends EventEmitter {
       fileName: msg.fileName,
       localTransferId,
       size: msg.size,
+      messageId: 0,
     });
 
     const offer: IncomingOffer = {
@@ -324,6 +343,19 @@ export class TransferService extends EventEmitter {
     let received = 0;
     let buf = Buffer.alloc(0);
 
+    // 接收一开始就在聊天区写入一条 in 文件消息（receiving 状态），
+    // 进度条挂在这条消息下方；finish 时更新其状态（done/failed）与最终路径。
+    const messageId = this.store.addMessage({
+      peerId: peer.id,
+      dir: 'in',
+      kind: 'file',
+      text: `文件：${path.basename(savePath)}（${size} 字节）`,
+      meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath, transferId: localTransferId, state: 'receiving' }),
+      ts: Date.now(),
+    });
+    row.messageId = messageId;
+    this.emit('message', peer.id);
+
     // 文件传输期间该连接专用于文件：摘除 chat 的帧解析器，避免原始字节被当帧解析
     this.chat.pauseFrames(socket);
 
@@ -353,20 +385,20 @@ export class TransferService extends EventEmitter {
             if (fs.existsSync(partPath)) fs.renameSync(partPath, savePath);
             this.store.updateTransfer(localTransferId, { state: 'done', path: savePath });
             this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'done');
-            // 记录一条 in 文件消息，让对话框里能看到「收到文件」
-            this.store.addMessage({
-              peerId: peer.id,
-              dir: 'in',
-              kind: 'file',
+            // 更新聊天区的 in 文件消息：done + 最终路径
+            this.store.updateMessage(messageId, {
               text: `文件：${path.basename(savePath)}（${size} 字节）`,
-              meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath }),
-              ts: Date.now(),
+              meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath, transferId: localTransferId, state: 'done' }),
             });
-            // 通知 UI 刷新聊天区，显示这条 in 文件消息
+            // 通知 UI 刷新聊天区
             this.emit('message', peer.id);
           } catch {
             this.store.updateTransfer(localTransferId, { state: 'failed' });
             this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
+            this.store.updateMessage(messageId, {
+              meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath, transferId: localTransferId, state: 'failed' }),
+            });
+            this.emit('message', peer.id);
           }
         } else {
           try {
@@ -376,6 +408,10 @@ export class TransferService extends EventEmitter {
           }
           this.store.updateTransfer(localTransferId, { state: 'failed' });
           this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
+          this.store.updateMessage(messageId, {
+            meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath, transferId: localTransferId, state: 'failed' }),
+          });
+          this.emit('message', peer.id);
         }
         this.incomingRows.delete(senderTransferId);
       });

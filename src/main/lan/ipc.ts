@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron';
 import { lanManager } from './lan';
 
 /**
@@ -112,5 +112,16 @@ export function installLanIpc(): void {
     const r = await dialog.showOpenDialog({ properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths.length) return null;
     return r.filePaths[0];
+  });
+
+  // 「打开文件位置」：在资源管理器中定位文件
+  ipcMain.handle('lan:showInFolder', (_e, filePath: string) => {
+    if (!filePath) return false;
+    try {
+      shell.showItemInFolder(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   });
 }

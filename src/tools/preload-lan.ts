@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('lan', {
   listInterfaces: () => ipcRenderer.invoke('lan:listInterfaces'),
   getSelectedInterface: () => ipcRenderer.invoke('lan:getSelectedInterface'),
   setNic: (address: string | null) => ipcRenderer.invoke('lan:setNic', address),
+  showInFolder: (filePath: string) => ipcRenderer.invoke('lan:showInFolder', filePath),
 
   /** 订阅主进程 push 的事件 */
   on: (cb: (channel: LanEventChannel, payload: any) => void) => {

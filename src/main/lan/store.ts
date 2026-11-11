@@ -149,6 +149,23 @@ export class LanStore {
     return Number(r.lastInsertRowid);
   }
 
+  /** 更新消息（用于文件传输：receiving → done/failed 时更新 text/meta） */
+  updateMessage(id: number, patch: { text?: string; meta?: string }): void {
+    const sets: string[] = [];
+    const vals: any[] = [];
+    if (patch.text !== undefined) {
+      sets.push('text = ?');
+      vals.push(patch.text);
+    }
+    if (patch.meta !== undefined) {
+      sets.push('meta = ?');
+      vals.push(patch.meta);
+    }
+    if (!sets.length) return;
+    vals.push(id);
+    this.db.prepare(`UPDATE messages SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  }
+
   /** 与某对端的最近 N 条消息（时间升序） */
   getMessages(peerId: string, limit = 200): MessageRow[] {
     return this.db

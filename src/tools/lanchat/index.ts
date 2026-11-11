@@ -24,6 +24,7 @@ declare global {
       getSelectedInterface(): Promise<NetIface | null>;
       setNic(address: string | null): Promise<NetIface | null>;
       setOnline(on: boolean): Promise<Snapshot>;
+      showInFolder(filePath: string): Promise<boolean>;
       on(cb: (channel: string, payload: unknown) => void): () => void;
     };
   }
@@ -184,65 +185,119 @@ async function renderMessages(): Promise<void> {
   const msgs = await window.lan.messages(activePeerId, 200);
   const sorted = [...msgs].reverse(); // store 返回时间降序，转升序
   box.innerHTML = sorted.length
-    ? sorted
-        .map((m) => {
-          if (m.kind === 'broadcast') {
-            return `<div class="lc-msg centered">📢 ${esc(m.text)}</div>`;
-          }
-          if (m.kind === 'file') {
-            return `<div class="lc-msg ${m.dir === 'out' ? 'out' : ''}">📄 ${esc(m.text)}<span class="mt">${fmtTime(m.ts)}</span></div>`;
-          }
-          return `<div class="lc-msg ${m.dir === 'out' ? 'out' : ''}">${esc(m.text)}<span class="mt">${fmtTime(m.ts)}</span></div>`;
-        })
-        .join('')
+    ? sorted.map(renderMessage).join('')
     : '<div class="lc-msg centered">还没有消息，打个招呼吧</div>';
+
+  // 文件消息：内联进度条 + 右键菜单（CSP 禁 inline style，用 CSSOM + 事件绑定）
+  box.querySelectorAll<HTMLElement>('.lc-msg.file').forEach((el) => {
+    bindFileMessage(el);
+  });
   box.scrollTop = box.scrollHeight;
 }
 
-function renderTransfers(): void {
-  const box = $('transfers');
-  const list = [...transfers.values()];
-  if (!list.length) {
-    box.classList.remove('has');
-    box.innerHTML = '';
-    return;
+/** 解析文件消息的 meta JSON */
+function parseFileMeta(meta: string): { fileName?: string; size?: number; savePath?: string; path?: string; transferId?: number; state?: string } {
+  try {
+    return JSON.parse(meta) as Record<string, unknown>;
+  } catch {
+    return {};
   }
-  box.classList.add('has');
-  box.innerHTML = list
-    .map((t) => {
-      const pct = t.size > 0 ? Math.min(100, Math.round((t.cur / t.size) * 100)) : 0;
-      const stateCls = t.state === 'done' ? ' ok' : t.state === 'failed' ? ' err' : '';
-      const barCls = t.state === 'done' ? ' done' : t.state === 'failed' ? ' err' : '';
-      const stateText =
-        t.state === 'done'
-          ? '完成'
-          : t.state === 'failed'
-            ? '失败'
-            : t.state === 'sending' || t.state === 'receiving'
-              ? `${pct}%`
-              : '等待中';
-      const dirTag = t.dir === 'out' ? '发送' : '接收';
-      return `
-        <div class="lc-tx" data-id="${t.transferId}">
-          <div class="trow">
-            <span class="tname">${dirTag} · ${esc(t.name)}</span>
-            <span class="tsize">${fmtSize(t.cur)} / ${fmtSize(t.size)}</span>
-          </div>
-          <div class="lc-bar${barCls}"><i></i></div>
-          <div class="tstate${stateCls}">${stateText}</div>
-        </div>`;
-    })
-    .join('');
+}
 
-  // 进度条宽度用 CSSOM 设置（CSP 禁 inline style）
-  box.querySelectorAll<HTMLElement>('.lc-tx').forEach((el) => {
-    const id = Number(el.dataset.id);
-    const t = transfers.get(id);
-    if (!t) return;
-    const pct = t.size > 0 ? Math.min(100, Math.round((t.cur / t.size) * 100)) : 0;
-    const bar = el.querySelector<HTMLElement>('i');
-    if (bar) bar.style.width = `${pct}%`;
+function renderMessage(m: Message): string {
+  if (m.kind === 'broadcast') {
+    return `<div class="lc-msg centered">📢 ${esc(m.text)}</div>`;
+  }
+  if (m.kind === 'file') {
+    const meta = parseFileMeta(m.meta);
+    const state = meta.state ?? 'done';
+    const filePath = meta.savePath ?? meta.path ?? '';
+    // 活动传输（sending/receiving）在消息下方渲染进度条
+    const progress = buildFileProgress(m, meta);
+    return `
+      <div class="lc-msg file ${m.dir === 'out' ? 'out' : ''}" data-id="${m.id}" data-path="${esc(filePath)}" data-transfer-id="${meta.transferId ?? ''}" data-state="${esc(state)}" data-dir="${m.dir}">
+        <div class="frow">📄 ${esc(m.text)}</div>
+        ${filePath ? `<div class="fpath" title="${esc(filePath)}">${esc(filePath)}</div>` : ''}
+        ${progress}
+        <span class="mt">${fmtTime(m.ts)}</span>
+      </div>`;
+  }
+  return `<div class="lc-msg ${m.dir === 'out' ? 'out' : ''}">${esc(m.text)}<span class="mt">${fmtTime(m.ts)}</span></div>`;
+}
+
+/**
+ * 根据文件消息的 state + transfers Map 生成内联进度条 HTML。
+ *   - state=sending/receiving 且有进度 → 进度条；否则空串。
+ *   - done 后不再显示进度条（用户需求）。
+ */
+function buildFileProgress(m: Message, meta: { transferId?: number; state?: string }): string {
+  const t = meta.transferId != null ? transfers.get(meta.transferId) : undefined;
+  if (!t || (t.state !== 'sending' && t.state !== 'receiving')) return '';
+  const pct = t.size > 0 ? Math.min(100, Math.round((t.cur / t.size) * 100)) : 0;
+  const label = t.state === 'sending' ? `发送中 ${pct}%` : `接收中 ${pct}%`;
+  return `
+    <div class="fprog" data-pct="${pct}">
+      <div class="fbar"><i></i></div>
+      <div class="fstate">${label} · ${fmtSize(t.cur)} / ${fmtSize(t.size)}</div>
+    </div>`;
+}
+
+/** 设置文件消息内联进度条宽度 + 绑定右键菜单 */
+function bindFileMessage(el: HTMLElement): void {
+  const prog = el.querySelector<HTMLElement>('.fprog');
+  if (prog) {
+    const pct = Number(prog.dataset.pct ?? '0');
+    const bar = prog.querySelector<HTMLElement>('i');
+    if (bar) bar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+  }
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showFileMenu(el, e.clientX, e.clientY);
   });
+}
+
+/* ---------- 文件右键菜单 ---------- */
+let contextMenu: HTMLElement | null = null;
+
+function showFileMenu(el: HTMLElement, x: number, y: number): void {
+  hideFileMenu();
+  const filePath = el.dataset.path ?? '';
+
+  const menu = document.createElement('div');
+  menu.className = 'lc-ctx';
+  menu.innerHTML = `
+    <div class="lc-ctx-item" data-act="open">📂 打开文件位置</div>
+    <div class="lc-ctx-item" data-act="copy">📋 复制路径</div>
+  `;
+  // 定位用 CSSOM（CSP 禁 inline style）
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  menu.querySelector('[data-act="open"]')?.addEventListener('click', () => {
+    if (filePath) void window.lan.showInFolder(filePath);
+    hideFileMenu();
+  });
+  menu.querySelector('[data-act="copy"]')?.addEventListener('click', () => {
+    if (filePath) void navigator.clipboard?.writeText(filePath);
+    hideFileMenu();
+  });
+
+  document.body.appendChild(menu);
+  contextMenu = menu;
+
+  // 点击别处关闭
+  const close = (ev: MouseEvent) => {
+    if (!menu.contains(ev.target as Node)) hideFileMenu();
+  };
+  setTimeout(() => document.addEventListener('click', close), 0);
+  menu.dataset.closeHandler = '1';
+}
+
+function hideFileMenu(): void {
+  if (contextMenu) {
+    contextMenu.remove();
+    contextMenu = null;
+  }
 }
 
 /* ---------- 事件 ---------- */
@@ -401,7 +456,8 @@ async function boot(): Promise<void> {
       case 'transfer-progress': {
         const p = payload as TransferProgress;
         transfers.set(p.transferId, p);
-        renderTransfers();
+        // 进度更新 → 刷新聊天区（内联进度条挂在文件消息下方）
+        if (activePeerId) void renderMessages();
         break;
       }
       case 'incoming-offer':

@@ -290,67 +290,73 @@ body {
   border-color: #b6d4fe;
 }
 
-/* ---------- 传输进度 ---------- */
-.lc-transfers {
-  flex: none;
-  border-top: 1px solid var(--line);
-  max-height: 160px;
-  overflow-y: auto;
-  display: none;
+/* ---------- 文件消息（内联进度 + 路径 + 右键） ---------- */
+.lc-msg.file {
+  cursor: default;
+  min-width: 180px;
 }
-.lc-transfers.has {
-  display: block;
-}
-.lc-tx {
-  padding: 10px 14px;
-  border-bottom: 1px solid #f0f1f3;
-}
-.lc-tx .trow {
+.lc-msg.file .frow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: 6px;
 }
-.lc-tx .tname {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lc-tx .tsize {
-  color: var(--t3);
-  font-size: 12px;
+.lc-msg.file .fpath {
+  font-size: 10.5px;
+  opacity: 0.72;
+  margin-top: 3px;
+  word-break: break-all;
   font-family: var(--mono);
+  user-select: text;
 }
-.lc-bar {
+.lc-msg.file .fprog {
+  margin-top: 6px;
+}
+.fbar {
   height: 6px;
-  background: #eef0f3;
+  background: rgba(0, 0, 0, 0.12);
   border-radius: 4px;
-  margin: 6px 0 0;
   overflow: hidden;
 }
-.lc-bar i {
+.lc-msg.file.out .fbar {
+  background: rgba(255, 255, 255, 0.28);
+}
+.fbar i {
   display: block;
   height: 100%;
   background: var(--acc);
   transition: width 0.15s;
 }
-.lc-bar.done i {
-  background: var(--ok);
+.lc-msg.file.out .fbar i {
+  background: #fff;
 }
-.lc-bar.err i {
-  background: var(--danger);
-}
-.lc-tx .tstate {
+.fstate {
   font-size: 11px;
   margin-top: 4px;
-  color: var(--t3);
+  opacity: 0.78;
 }
-.lc-tx .tstate.ok {
-  color: var(--ok);
+
+/* ---------- 文件右键菜单 ---------- */
+.lc-ctx {
+  position: fixed;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  z-index: 200;
 }
-.lc-tx .tstate.err {
-  color: var(--danger);
+.lc-ctx-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--t1);
+  white-space: nowrap;
+}
+.lc-ctx-item:hover {
+  background: var(--acc-soft);
+  color: var(--acc);
 }
 
 /* ---------- 弹窗 ---------- */
