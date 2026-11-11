@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>局域网通信 · 界面原型</title>
+<style>
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --line: #e3e6ea;
+  --ink: #1f2328;
+  --muted: #6b7280;
+  --accent: #3b82f6;
+  --accent-soft: #eaf2fe;
+  --ok: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --code: #0f172a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.5;
+}
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+.nav { display: flex; gap: 8px; margin: 0 0 20px; flex-wrap: wrap; }
+.nav button {
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.screen { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.screen.active { display: block; }
+.screen h2 { font-size: 15px; margin: 0 0 4px; }
+.screen .desc { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+.frame {
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #92400e; margin: 14px 0 0; }
+.note b { color: #78350f; }
+/* 通用布局 */
+.win { display: grid; grid-template-columns: 220px 1fr; height: 480px; }
+.sidebar { border-right: 1px solid var(--line); background: #fafbfc; display: flex; flex-direction: column; }
+.side-head { padding: 10px 12px; font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--line); }
+.peer { padding: 10px 12px; border-bottom: 1px solid #f0f1f3; cursor: pointer; }
+.peer.active { background: var(--accent-soft); border-left: 3px solid var(--accent); }
+.peer .pname { font-size: 13px; font-weight: 600; }
+.peer .pip { font-size: 11px; color: var(--muted); }
+.peer .pstatus { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 4px; }
+.peer .pstatus.off { background: #cbd5e1; }
+.peer .badge { float: right; background: var(--danger); color: #fff; font-size: 10px; border-radius: 9px; padding: 1px 6px; }
+.chat { display: flex; flex-direction: column; }
+.chat-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.chat-body { flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 72%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; }
+.msg.in { align-self: flex-start; background: #f1f3f5; border-bottom-left-radius: 3px; }
+.msg.out { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+.msg .mt { font-size: 10px; opacity: .6; display: block; margin-top: 2px; }
+.chat-input { border-top: 1px solid var(--line); padding: 10px; display: flex; gap: 8px; }
+.chat-input input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.chat-input button { border: none; background: var(--accent); color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
+.iconbtn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 14px; }
+/* 进度条 */
+.tx { padding: 12px 14px; border-bottom: 1px solid #f0f1f3; }
+.tx .trow { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.tx .tname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx .tsize { color: var(--muted); font-size: 12px; }
+.bar { height: 6px; background: #eef0f3; border-radius: 4px; margin: 8px 0 0; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+.bar.done i { background: var(--ok); }
+.bar.err i { background: var(--danger); }
+.tx .tstate { font-size: 11px; margin-top: 4px; }
+.tx .tstate.ok { color: var(--ok); }
+.tx .tstate.err { color: var(--danger); }
+/* 弹窗 */
+.modal-back { position: relative; height: 300px; background: rgba(15,23,42,.35); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.modal { background: #fff; border-radius: 12px; padding: 20px; width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.modal h3 { font-size: 14px; margin: 0 0 10px; }
+.modal p { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.modal .mrow { display: flex; gap: 8px; justify-content: flex-end; }
+.btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 13px; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.warn { background: var(--warn); color: #fff; border-color: var(--warn); }
+.pin-box { display: flex; gap: 6px; justify-content: center; margin: 0 0 14px; }
+.pin-box .dig { width: 34px; height: 42px; border: 1px solid var(--line); border-radius: 6px; font-size: 20px; text-align: center; line-height: 42px; font-weight: 700; }
+/* 网格 */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+</style>
+</head>
+<body>
+<h1>局域网通信 · 界面原型</h1>
+<p class="sub">Agent Pulse 工具箱新工具「局域网通信」— 静态线框，仅示意布局与交互，不含真实逻辑。</p>
+
+<div class="nav" id="nav">
+  <button class="active" data-t="overview">总览</button>
+  <button data-t="peers">1 · 设备列表</button>
+  <button data-t="chat">2 · 一对一聊天</button>
+  <button data-t="broadcast">3 · 广播</button>
+  <button data-t="sendfile">4 · 发文件</button>
+  <button data-t="recvfile">5 · 收文件</button>
+  <button data-t="pin">6 · PIN 确认</button>
+  <button data-t="tray">7 · 托盘入口</button>
+</div>
+
+<!-- 总览 -->
+<div class="screen active" id="overview">
+  <h2>总览 · 信息架构</h2>
+  <p class="desc">工具的窗口结构：左侧设备列表 + 右侧功能区（聊天 / 传输）。顶部一条工具栏（本机状态、发送文件、设置）。</p>
+  <div class="frame">
+    <div class="win">
+      <div class="sidebar">
+        <div class="side-head">🛜 局域网 · 3 在线</div>
+        <div class="peer active"><span class="pstatus"></span><span class="pname">本机</span><div class="pip">192.168.1.23 · DESKTOP-ABC</div></div>
+        <div class="peer"><span class="pstatus"></span><span class="pname">张三的台式机</span><div class="pip">192.168.1.45 · DESKTOP-ZHS</div></div>
+        <div class="peer"><span class="pstatus"></span><span class="pname">李四的笔记本</span><div class="pip">192.168.1.72 · LAPTOP-LS</div></div>
+        <div class="peer"><span class="pstatus off"></span><span class="pname">王五（离线）</span><div class="pip">192.168.1.90 · DESKTOP-WW</div></div>
+      </div>
+      <div class="chat">
+        <div class="chat-head">↩ 选择一个在线设备开始聊天或传文件</div>
+        <div class="chat-body" style="align-items:center;justify-content:center;color:var(--muted);font-size:13px;">
+          左侧点选设备后，这里显示对话 / 发送面板
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>布局说明</b>：左栏 220px 固定；右栏随选中对象切换三种视图 —— ①对话视图（聊天）②传输视图（文件）③空态（未选中）。本机固定显示在列表顶部，标「本机」。</div>
+</div>
+
+<!-- 设备列表 -->
+<div class="screen" id="peers">
+  <h2>1 · 设备列表</h2>
+  <p class="desc">自动发现（UDP 组播）的结果。显示名 = IP + 主机名（评审决定，暂不支持改名）。未读消息用红色角标。</p>
+  <div class="frame" style="width:320px;">
+    <div class="side-head">🛜 局域网 · 3 在线</div>
+    <div class="peer"><span class="pstatus"></span><span class="pname">本机</span><div class="pip">192.168.1.23 · DESKTOP-ABC</div></div>
+    <div class="peer"><span class="pstatus"></span><span class="pname">张三的台式机</span><span class="badge">3</span><div class="pip">192.168.1.45 · DESKTOP-ZHS</div></div>
+    <div class="peer"><span class="pstatus"></span><span class="pname">李四的笔记本</span><div class="pip">192.168.1.72 · LAPTOP-LS</div></div>
+    <div class="peer"><span class="pstatus off"></span><span class="pname">王五（离线）</span><div class="pip">192.168.1.90 · DESKTOP-WW</div></div>
+  </div>
+  <div class="note"><b>交互</b>：绿点=在线、灰点=离线（9s 无心跳自动转灰）。红色角标=该设备的未读消息数。点设备 → 进入一对一。顶部「🛜」可点开下拉：加入/退出局域网发现。</div>
+</div>
+
+<!-- 聊天 -->
+<div class="screen" id="chat">
+  <h2>2 · 一对一聊天</h2>
+  <p class="desc">文字默认接收（无需 PIN）。气泡 + 时间戳。输入框回车发送。</p>
+  <div class="frame">
+    <div class="win">
+      <div class="sidebar">
+        <div class="side-head">🛜 局域网 · 3 在线</div>
+        <div class="peer"><span class="pstatus"></span><span class="pname">本机</span><div class="pip">192.168.1.23 · DESKTOP-ABC</div></div>
+        <div class="peer active"><span class="pstatus"></span><span class="pname">张三的台式机</span><div class="pip">192.168.1.45 · DESKTOP-ZHS</div></div>
+      </div>
+      <div class="chat">
+        <div class="chat-head">张三的台式机 · 192.168.1.45</div>
+        <div class="chat-body">
+          <div class="msg in">你那段代码 push 了吗？<span class="mt">10:24</span></div>
+          <div class="msg out">还没，我这边还差两个测试。<span class="mt">10:25</span></div>
+          <div class="msg in">好，等你好了叫我一声。<span class="mt">10:25</span></div>
+          <div class="msg out">OK 👍<span class="mt">10:26</span></div>
+        </div>
+        <div class="chat-input">
+          <button class="iconbtn" title="发送文件">📎</button>
+          <input placeholder="输入消息…" />
+          <button>发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>交互</b>：📎 按钮 = 发送文件/文件夹（跳到第 4 屏）。气泡右侧=自己（蓝底白字），左侧=对方（灰底）。</div>
+</div>
+
+<!-- 广播 -->
+<div class="screen" id="broadcast">
+  <h2>3 · 广播</h2>
+  <p class="desc">勾选多个（或全选在线）后，一条消息发到所有选中端。各端在正常聊天里收到同一条广播。</p>
+  <div class="frame">
+    <div class="win" style="grid-template-columns:220px 1fr;">
+      <div class="sidebar">
+        <div class="side-head">📢 广播给…</div>
+        <div class="peer"><span class="pstatus"></span><span class="pname">☑ 张三的台式机</span><div class="pip">192.168.1.45</div></div>
+        <div class="peer"><span class="pstatus"></span><span class="pname">☑ 李四的笔记本</span><div class="pip">192.168.1.72</div></div>
+        <div class="peer"><span class="pstatus off"></span><span class="pname">☐ 王五（离线）</span><div class="pip">已跳过</div></div>
+        <div class="peer" style="color:var(--accent);font-weight:600;">全选在线（2）</div>
+      </div>
+      <div class="chat">
+        <div class="chat-head">📢 广播（发送给 2 个在线设备）</div>
+        <div class="chat-body"></div>
+        <div class="chat-input">
+          <input placeholder="广播内容：我要重启数据库了…" />
+          <button style="background:var(--warn);">广播</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>交互</b>：离线设备灰显且不可勾选。广播消息在接收端的聊天里同样以气泡显示，并标注「广播」。</div>
+</div>
+
+<!-- 发文件 -->
+<div class="screen" id="sendfile">
+  <h2>4 · 发文件（发送端视角 + 进度条）</h2>
+  <p class="desc">拖拽/点选文件到对话，显示发送进度（百分比 + 速率 + 剩余）。文件夹递归发送。</p>
+  <div class="frame">
+    <div class="win">
+      <div class="sidebar">
+        <div class="side-head">发送中…</div>
+        <div class="peer active"><span class="pstatus"></span><span class="pname">张三的台式机</span><div class="pip">192.168.1.45</div></div>
+      </div>
+      <div class="chat">
+        <div class="chat-head">发送给 张三的台式机</div>
+        <div class="chat-body" style="justify-content:flex-start;">
+          <div class="msg out">
+            📄 server-log-2026-11-11.tar.gz
+            <span class="mt">512 MB</span>
+          </div>
+          <div class="tx" style="width:100%;">
+            <div class="trow"><span class="tname">server-log-2026-11-11.tar.gz</span><span class="tsize">312 / 512 MB</span></div>
+            <div class="bar"><i style="width:61%;"></i></div>
+            <div class="tstate">61% · 38.2 MB/s · 剩余 6s</div>
+          </div>
+        </div>
+        <div class="chat-input">
+          <button class="iconbtn" title="再发文件">📎</button>
+          <input placeholder="可同时发文字…" />
+          <button>发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>交互</b>：发送中可继续打字聊天（传输与消息独立）。进度条蓝色=进行中；完成转绿；失败转红并显示「重试」。</div>
+</div>
+
+<!-- 收文件 -->
+<div class="screen" id="recvfile">
+  <h2>5 · 收文件（接收端视角 + 首次确认）</h2>
+  <p class="desc">首次从某个设备收文件 → 弹确认框（记住选择）。之后该设备不再询问，直接收到默认目录。</p>
+  <div class="grid2">
+    <div class="frame">
+      <div class="chat-head">接收进度</div>
+      <div class="tx">
+        <div class="trow"><span class="tname">server-log.tar.gz（来自 张三的台式机）</span><span class="tsize">312 / 512 MB</span></div>
+        <div class="bar"><i style="width:61%;"></i></div>
+        <div class="tstate ok">正在接收 · 61%</div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="modal-back">
+        <div class="modal">
+          <h3>收到文件</h3>
+          <p><b>张三的台式机</b> 想发送<br/><b>server-log-2026-11-11.tar.gz</b>（512 MB）</p>
+          <p style="font-size:12px;">保存到：下载目录\AgentPulse\</p>
+          <div class="mrow">
+            <button class="btn">拒绝</button>
+            <button class="btn">更改目录</button>
+            <button class="btn primary">接收</button>
+          </div>
+          <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-top:12px;">
+            <input type="checkbox" checked /> 记住，以后来自此设备的文件直接接收
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>交互</b>：首次从某设备收文件弹此框（评审决定：文件首次确认一次后记住）。勾选「记住」后不再询问。「更改目录」打开系统目录选择框。</div>
+</div>
+
+<!-- PIN -->
+<div class="screen" id="pin">
+  <h2>6 · PIN 确认（文件可选）</h2>
+  <p class="desc">发送方可选「要求 PIN 确认」——接收方需输入发送方口头告知的 6 位配对码才能接收文件。</p>
+  <div class="grid2">
+    <div class="frame">
+      <div class="modal-back" style="height:260px;">
+        <div class="modal">
+          <h3>发送需 PIN 确认的文件</h3>
+          <p>对方需要输入下面的配对码才能接收：</p>
+          <div class="pin-box"><span class="dig">4</span><span class="dig">8</span><span class="dig">2</span><span class="dig">0</span><span class="dig">9</span><span class="dig">1</span></div>
+          <div class="mrow"><button class="btn primary">发送</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="modal-back" style="height:260px;">
+        <div class="modal">
+          <h3>输入配对码</h3>
+          <p>来自 <b>张三的台式机</b> 的文件需要 PIN 确认。</p>
+          <div class="pin-box">
+            <span class="dig">_</span><span class="dig">_</span><span class="dig">_</span><span class="dig">_</span><span class="dig">_</span><span class="dig">_</span>
+          </div>
+          <div class="mrow"><button class="btn">取消</button><button class="btn primary">确认</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>规则</b>：PIN 由发送端生成（6 位随机），发送方口头/当面告知接收方。文字消息<u>不</u>走 PIN（评审决定），仅文件可选。</div>
+</div>
+
+<!-- 托盘 -->
+<div class="screen" id="tray">
+  <h2>7 · 托盘入口</h2>
+  <p class="desc">托盘右键菜单新增「🛜 局域网通信」项，点击直接打开工具窗口（评审决定：v1 做）。</p>
+  <div class="frame" style="width:280px;">
+    <div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;padding:8px 12px;">🛜 局域网通信 <span style="color:var(--muted);float:right;font-size:11px;">→</span></div>
+    <div style="padding:8px 12px;font-size:13px;border-bottom:1px solid var(--line);">🆕 检查更新（当前 v0.1.13）</div>
+    <div style="padding:8px 12px;font-size:13px;border-bottom:1px solid var(--line);">收缩 / 展开浮窗</div>
+    <div style="padding:8px 12px;font-size:13px;border-bottom:1px solid var(--line);">显示 / 隐藏</div>
+    <div style="padding:8px 12px;font-size:13px;">退出</div>
+  </div>
+  <div class="note"><b>说明</b>：菜单项放在「检查更新」上方或下方均可，点击等价于 `openTool('lanchat')`。黄色项=新增；其余为现有托盘项。</div>
+</div>
+
+<script>
+const nav = document.getElementById('nav');
+const screens = document.querySelectorAll('.screen');
+nav.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  nav.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  screens.forEach(s => s.classList.toggle('active', s.id === b.dataset.t));
+});
+</script>
+</body>
+</html>

@@ -30,3 +30,10 @@ await build({
   entryPoints: ['src/tools/preload.ts'],
   outfile: 'dist/tools/preload.js',
 });
+
+// lanchat 工具窗口的专属 preload（window.lan）
+await build({
+  ...common,
+  entryPoints: ['src/tools/preload-lan.ts'],
+  outfile: 'dist/tools/preload-lan.js',
+});

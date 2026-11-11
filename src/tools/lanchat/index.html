@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>局域网通信</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="lc-head">
+        <span class="lc-title" id="self-label">🛜 局域网通信</span>
+        <div class="lc-actions">
+          <button class="lc-btn" id="btn-refresh" title="立即重新发现">刷新</button>
+          <button class="lc-btn" id="btn-broadcast" title="给所有在线设备广播消息">📢 广播</button>
+          <button class="lc-btn" id="btn-send" title="发送文件给选中的设备">📎 发文件</button>
+        </div>
+      </header>
+
+      <div class="lc-main">
+        <!-- 左侧设备列表 -->
+        <aside class="lc-sidebar">
+          <div class="lc-sidebar-head">
+            <span id="online-count">在线 0</span>
+            <span class="lc-muted" id="self-ip"></span>
+          </div>
+          <div class="lc-peers" id="peers"></div>
+        </aside>
+
+        <!-- 右侧对话区 -->
+        <section class="lc-chat">
+          <div class="lc-chat-head" id="chat-title">选择一个在线设备开始聊天</div>
+          <div class="lc-messages" id="messages"></div>
+          <div class="lc-input">
+            <input type="text" id="msg-input" placeholder="输入消息，回车发送…" autocomplete="off" />
+            <button class="lc-btn primary" id="btn-send-msg">发送</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 传输进度面板（底部） -->
+      <div class="lc-transfers" id="transfers"></div>
+    </div>
+
+    <!-- 接收确认弹窗 -->
+    <div class="lc-modal-back" id="modal" hidden>
+      <div class="lc-modal">
+        <h3 id="modal-title">收到文件</h3>
+        <p id="modal-desc"></p>
+        <label class="lc-check">
+          <input type="checkbox" id="modal-remember" checked />
+          记住，以后来自此设备的文件直接接收
+        </label>
+        <div class="lc-modal-actions">
+          <button class="lc-btn" id="modal-reject">拒绝</button>
+          <button class="lc-btn" id="modal-change">更改目录</button>
+          <button class="lc-btn primary" id="modal-accept">接收</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 广播弹窗 -->
+    <div class="lc-modal-back" id="bc-modal" hidden>
+      <div class="lc-modal">
+        <h3>📢 广播</h3>
+        <p class="lc-muted">发送给所有在线设备（<span id="bc-count">0</span> 个）</p>
+        <input type="text" id="bc-input" class="lc-input" placeholder="广播内容…" autocomplete="off" />
+        <div class="lc-modal-actions">
+          <button class="lc-btn" id="bc-cancel">取消</button>
+          <button class="lc-btn primary" id="bc-send">广播</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="index.js"></script>
+  </body>
+</html>

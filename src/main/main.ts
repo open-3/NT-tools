@@ -11,8 +11,10 @@ import { reconcile, sameSnapshot, ViewSnapshot } from './reconcile';
 import { AutoCollapse } from './autocollapse';
 import { readQuota } from './quota';
 import { QuotaState } from './adapters/types';
-import { showToolboxMenu, installToolIpc } from './tools';
+import { showToolboxMenu, installToolIpc, openTool } from './tools';
 import { initUpdater, checkForUpdates, installUpdaterIpc, getAvailableVersion, setUpdaterStateListener, setUpdaterProgressListener, downloadNow } from './updater';
+import { installLanIpc } from './lan/ipc';
+import { lanManager } from './lan/lan';
 
 const WIDTH = 362;
 const HEADER_H = 42;
@@ -421,6 +423,10 @@ function buildTrayMenu(): void {
     },
     { type: 'separator' },
     {
+      label: '🛜 局域网通信',
+      click: () => openTool('lanchat'),
+    },
+    {
       // 有已知新版本时，菜单项醒目标注，点击直接下载；
       // 否则显示「检查更新」，点击触发一次检查
       label: getAvailableVersion()
@@ -680,6 +686,7 @@ if (!gotLock) {
 
     createWindow();
     installIpc();
+    installLanIpc();
 
     // 远程更新：启动后静默检查（内部延迟 8 秒）
     if (win) initUpdater(win);
@@ -732,6 +739,7 @@ if (!gotLock) {
       }
     }
     globalShortcut.unregisterAll();
+    lanManager.stop();
   });
 
   // 有监听器就足以阻止 Electron 在关窗时自动退出（浮窗是隐藏不是关闭）。

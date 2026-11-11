@@ -17,6 +17,7 @@ const suites = [
   { src: 'scripts/test-project.ts', out: 'dist/test-proj.cjs' },
   { src: 'scripts/test-quota.ts', out: 'dist/test-quota.cjs' },
   { src: 'scripts/test-stall.ts', out: 'dist/test-stall.cjs' },
+  { src: 'scripts/test-lan-e2e.ts', out: 'dist/test-lan.cjs' },
 ];
 
 let failed = 0;

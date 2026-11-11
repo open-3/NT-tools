@@ -2,6 +2,8 @@ import { BrowserWindow, Menu, dialog, ipcMain, screen, shell, desktopCapturer } 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
+import { setLanWindow } from './lan/ipc';
+import { lanManager } from './lan/lan';
 
 /**
  * 工具箱：给浮窗外挂一组独立的小工具窗口。
@@ -59,6 +61,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'env', label: '环境变量', icon: '🎛', size: { width: 700, height: 740 } },
   // 其他小工具
   { id: 'cheatsheet', label: '终端小抄', icon: '⌘', size: { width: 740, height: 760 } },
+  // 局域网通信（聊天 + 传文件，专属 preload）
+  { id: 'lanchat', label: '局域网通信', icon: '🛜', size: { width: 860, height: 640 } },
 ];
 
 /** 每个工具当前打开的窗口列表（按 id 分组，窗口关闭时移除） */
@@ -71,6 +75,11 @@ function toolEntry(toolId: string): string {
 
 function toolPreload(): string {
   return path.join(__dirname, '..', 'tools', 'preload.js');
+}
+
+/** lanchat 工具的专属 preload（暴露 window.lan） */
+function toolLanPreload(): string {
+  return path.join(__dirname, '..', 'tools', 'preload-lan.js');
 }
 
 /** 工具窗口独立图标（程序化生成的彩色圆角方块，见 scripts/gen-tool-icons.py） */
@@ -109,7 +118,7 @@ export function openTool(toolId: string): void {
     backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
-      preload: toolPreload(),
+      preload: def.id === 'lanchat' ? toolLanPreload() : toolPreload(),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -142,9 +151,19 @@ export function openTool(toolId: string): void {
     });
   });
 
+  // lanchat 打开时应启动局域网服务
+  if (toolId === 'lanchat') {
+    lanManager.start();
+  }
+
   const list = toolWindows.get(toolId) ?? [];
   list.push(win);
   toolWindows.set(toolId, list);
+
+  // lanchat：登记当前活动窗口，供 LAN push 事件定向投递
+  if (toolId === 'lanchat') {
+    setLanWindow(win);
+  }
 
   win.on('closed', () => {
     const arr = toolWindows.get(toolId);
@@ -152,6 +171,14 @@ export function openTool(toolId: string): void {
     const i = arr.indexOf(win);
     if (i >= 0) arr.splice(i, 1);
     if (arr.length === 0) toolWindows.delete(toolId);
+    if (toolId === 'lanchat') {
+      if (arr.length) setLanWindow(arr[arr.length - 1]);
+      else {
+        setLanWindow(null);
+        // 最后一个 lanchat 窗口关闭：停止局域网服务，减少常驻开销
+        lanManager.stop();
+      }
+    }
   });
 }
 
