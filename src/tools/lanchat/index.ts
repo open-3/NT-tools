@@ -20,12 +20,26 @@ declare global {
       messages(peerId: string, limit?: number): Promise<Message[]>;
       pickFile(): Promise<string | null>;
       pickDir(): Promise<string | null>;
+      listInterfaces(): Promise<NetIface[]>;
+      getSelectedInterface(): Promise<NetIface | null>;
+      setNic(address: string | null): Promise<NetIface | null>;
       on(cb: (channel: string, payload: unknown) => void): () => void;
     };
   }
 }
 
 export {};
+
+interface NetIface {
+  name: string;
+  address: string;
+  netmask: string;
+  mac: string;
+  family: string;
+  internal: boolean;
+  virtual: boolean;
+  apipa: boolean;
+}
 
 interface Peer {
   id: string;
@@ -302,6 +316,57 @@ function acceptFile(ok: boolean): void {
   acceptSavePath = null;
 }
 
+/* ---------- 网卡选择 ---------- */
+
+async function renderNicSelector(): Promise<void> {
+  const sel = $<HTMLSelectElement>('nic-select');
+  if (!sel) return;
+
+  const [ifaces, cur] = await Promise.all([
+    window.lan.listInterfaces(),
+    window.lan.getSelectedInterface(),
+  ]);
+
+  // 只显示可用的非虚拟网卡（虚拟/APIPA 仍列出但标记，供极端情况手动选）
+  const items = ifaces.filter((i) => !i.virtual);
+  const shown = items.length ? items : ifaces;
+
+  sel.innerHTML = '';
+  // 自动选项
+  const autoOpt = document.createElement('option');
+  autoOpt.value = '';
+  autoOpt.textContent = '自动检测';
+  sel.appendChild(autoOpt);
+
+  for (const i of shown) {
+    const opt = document.createElement('option');
+    opt.value = i.address;
+    const tag = i.virtual ? '（虚拟）' : i.apipa ? '（无网）' : '';
+    opt.textContent = `${i.name} · ${i.address}${tag}`;
+    sel.appendChild(opt);
+  }
+
+  // 居中选中的：有手动指定 → 选它；否则选「自动」
+  const override = cur ? (shown.some((i) => i.address === cur.address) || shown.some((i) => i.name === cur.name) ? cur : null) : null;
+  sel.value = override ? cur!.address : '';
+}
+
+function bindNicSelector(): void {
+  const sel = $<HTMLSelectElement>('nic-select');
+  if (!sel) return;
+  sel.addEventListener('change', () => {
+    const v = sel.value || null;
+    void window.lan.setNic(v).then(() => {
+      // 网卡切换后立即刷新快照
+      void window.lan.snapshot().then((s) => {
+        snapshot = s;
+        renderSelf();
+        renderPeers();
+      });
+    });
+  });
+}
+
 /* ---------- 启动 ---------- */
 
 async function boot(): Promise<void> {
@@ -332,6 +397,8 @@ async function boot(): Promise<void> {
   renderSelf();
   renderPeers();
   await renderMessages();
+  await renderNicSelector();
+  bindNicSelector();
 
   // 输入
   $('msg-input').addEventListener('keydown', (e) => {

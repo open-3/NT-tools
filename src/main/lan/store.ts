@@ -84,7 +84,29 @@ export class LanStore {
         ts INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_transfers_ts ON transfers(ts);
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT ''
+      );
     `);
+  }
+
+  /** 读取设置项 */
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  /** 写入设置项 */
+  setSetting(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
   }
 
   /** 已知对端信息；不存在返回 undefined */

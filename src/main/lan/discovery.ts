@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { userDataPath } from './env';
 import { APP_ID, MULTICAST_ADDR, MULTICAST_PORT, HELLO_INTERVAL_MS, PEER_TIMEOUT_MS, LanHello } from './protocol';
 import { LanStore } from './store';
+import { listInterfaces, primaryIp as bestPrimaryIp } from './netif';
 
 /**
  * UDP 组播发现：每 3s 广播 hello，9s 无响应判离线。
@@ -37,6 +38,8 @@ export class Discovery {
     private tcpPort: number,
     private selfId: string,
     private selfName: string,
+    /** 手动指定的网卡 IP/名（可选），覆盖自动选择 */
+    private nicOverride?: string,
   ) {
     this.ownIps = this.localIps();
   }
@@ -74,11 +77,8 @@ export class Discovery {
 
   private localIps(): Set<string> {
     const ips = new Set<string>();
-    const ifaces = os.networkInterfaces();
-    for (const name of Object.keys(ifaces)) {
-      for (const iface of ifaces[name] ?? []) {
-        if (iface.family === 'IPv4' && !iface.internal) ips.add(iface.address);
-      }
+    for (const iface of listInterfaces()) {
+      ips.add(iface.address);
     }
     return ips;
   }
@@ -101,7 +101,34 @@ export class Discovery {
         // 生产环境禁用本机回环（避免把自己识别为对端）。
         // 同机多实例测试（如 e2e）需开启回环才能互见，用 env 覆盖。
         sock.setMulticastLoopback(process.env.AGENT_PULSE_LAN_LOOPBACK === '1');
-        sock.addMembership(MULTICAST_ADDR);
+        // 关键：在多网卡机器上，组播发送与接收默认都走「默认路由网卡」
+        // （可能是 VMware/以太网而非正在用的 WiFi）。需在「非虚拟且非 APIPA」
+        // 的活跃网卡上分别 addMembership，并用 setMulticastInterface 指定发送
+        // 出口；手动指定网卡时只加该网卡。
+        const candidates = listInterfaces()
+          .filter((i) => !i.virtual && !i.apipa)
+          .filter((i) => !this.nicOverride || i.address === this.nicOverride || i.name === this.nicOverride);
+        const targets = candidates.length ? candidates : listInterfaces().filter((i) => !i.virtual);
+        const ips = new Set<string>();
+        for (const iface of targets) {
+          if (ips.has(iface.address)) continue;
+          ips.add(iface.address);
+          try {
+            sock.addMembership(MULTICAST_ADDR, iface.address);
+          } catch {
+            /* 某些网卡不支持，忽略 */
+          }
+        }
+        if (ips.size === 0) {
+          sock.addMembership(MULTICAST_ADDR);
+        } else {
+          const sendIp = this.nicOverride ?? [...ips][0];
+          try {
+            sock.setMulticastInterface(sendIp);
+          } catch {
+            /* 忽略 */
+          }
+        }
       } catch (e: any) {
         console.error('[lan] multicast join failed', e?.message);
       }
@@ -221,13 +248,7 @@ export class Discovery {
   }
 }
 
-/** 选择本机一个可用的局域网 IPv4 */
+/** 选择本机一个可用的局域网 IPv4（智能，过滤虚拟/APIPA，优先默认网关网卡） */
 export function primaryIp(): string {
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    for (const iface of ifaces[name] ?? []) {
-      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
-    }
-  }
-  return '127.0.0.1';
+  return bestPrimaryIp();
 }

@@ -4,6 +4,7 @@ import { LanStore } from './store';
 import { Discovery, PeerInfo, primaryIp } from './discovery';
 import { ChatService } from './chat';
 import { TransferService } from './transfer';
+import { listInterfaces, selectBestInterface, NetInterface } from './netif';
 
 /**
  * 局域网通信门面：把 discovery / chat / transfer / store 组装起来，
@@ -41,6 +42,9 @@ export class LanManager extends EventEmitter {
     this.refs++;
     if (this.running) return;
 
+    // 读手动指定网卡（若有）
+    const nicOverride = this.store.getSetting('nicOverride') ?? undefined;
+
     // 1) 身份
     const { id, name } = Discovery.identity();
 
@@ -52,7 +56,7 @@ export class LanManager extends EventEmitter {
     // 3) 端口确定后建 discovery（hello 带真实 tcpPort），再建 transfer + wire
     chat.once('listening', (port: number) => {
       if (this.running) return;
-      const discovery = new Discovery(this.store, port, id, name);
+      const discovery = new Discovery(this.store, port, id, name, nicOverride);
       this.discovery = discovery;
       this.transfer = new TransferService(this.store, chat, discovery);
       this.wire();
@@ -66,7 +70,7 @@ export class LanManager extends EventEmitter {
     // 兜底：listen 出错也建 discovery（端口 0）
     chat.once('error', () => {
       if (this.running || this.discovery) return;
-      const discovery = new Discovery(this.store, 0, id, name);
+      const discovery = new Discovery(this.store, 0, id, name, nicOverride);
       this.discovery = discovery;
       this.transfer = new TransferService(this.store, chat, discovery);
       this.wire();
@@ -144,6 +148,34 @@ export class LanManager extends EventEmitter {
 
   getMessages(peerId: string, limit = 200) {
     return this.store.getMessages(peerId, limit);
+  }
+
+  /** 列出可选网卡（供 UI 下拉） */
+  listInterfaces(): NetInterface[] {
+    return listInterfaces();
+  }
+
+  /** 当前生效的网卡（自动选择结果或手动指定） */
+  getSelectedInterface(): NetInterface | null {
+    const override = this.store.getSetting('nicOverride') ?? undefined;
+    return selectBestInterface(override);
+  }
+
+  /** 手动指定网卡（传 null 清除，回到自动） */
+  setNicOverride(address: string | null): void {
+    if (address) this.store.setSetting('nicOverride', address);
+    else this.store.setSetting('nicOverride', '');
+    // 已运行时需重启 discovery 使新网卡生效
+    if (this.running) {
+      const wasRunning = this.running;
+      const refs = this.refs;
+      this.stop();
+      this.refs = refs; // 保留引用，避免 stop 归零后完全停掉
+      this.running = false;
+      if (wasRunning) this.start();
+      // start 会 refs++，这里减去一次避免重复累加
+      this.refs = refs;
+    }
   }
 }
 

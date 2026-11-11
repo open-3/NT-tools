@@ -81,6 +81,19 @@ export function installLanIpc(): void {
     return lanManager.getMessages(peerId, limit ?? 200);
   });
 
+  ipcMain.handle('lan:listInterfaces', () => {
+    return lanManager.listInterfaces();
+  });
+
+  ipcMain.handle('lan:getSelectedInterface', () => {
+    return lanManager.getSelectedInterface();
+  });
+
+  ipcMain.handle('lan:setNic', (_e, address: string | null) => {
+    lanManager.setNicOverride(address);
+    return lanManager.getSelectedInterface();
+  });
+
   ipcMain.handle('lan:pickFile', async () => {
     const r = await dialog.showOpenDialog({
       properties: ['openFile'],
