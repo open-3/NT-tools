@@ -35,6 +35,7 @@ export class ChatService extends EventEmitter {
   private tcpPort = 0;
   private conns = new Map<string, net.Socket>(); // peerId -> socket
   private buffers = new Map<net.Socket, Buffer>(); // 按 socket 累积（健壮且支持复用）
+  private handlers = new Map<net.Socket, (chunk: Buffer) => void>(); // 每 socket 的 data 解析器（供文件传输期间摘除）
 
   constructor(
     private store: LanStore,
@@ -71,9 +72,26 @@ export class ChatService extends EventEmitter {
 
   private onConnection(socket: net.Socket): void {
     this.buffers.set(socket, Buffer.alloc(0));
-    socket.on('data', (chunk) => this.onData(socket, chunk));
+    const handler = (chunk: Buffer) => this.onData(socket, chunk);
+    this.handlers.set(socket, handler);
+    socket.on('data', handler);
     socket.on('error', () => this.onSocketClose(socket));
     socket.on('close', () => this.onSocketClose(socket));
+  }
+
+  /**
+   * 文件传输期间摘除该 socket 的帧解析器，让原始字节只流向 TransferService。
+   * 传完 resumeFrames 恢复。若该 socket 从未挂过解析器（如出站 socket 未走
+   * onConnection），忽略即可。
+   */
+  pauseFrames(socket: net.Socket): void {
+    const h = this.handlers.get(socket);
+    if (h) socket.off('data', h);
+  }
+
+  resumeFrames(socket: net.Socket): void {
+    const h = this.handlers.get(socket);
+    if (h) socket.on('data', h);
   }
 
   private onData(socket: net.Socket, chunk: Buffer): void {
@@ -128,6 +146,7 @@ export class ChatService extends EventEmitter {
 
   private onSocketClose(socket: net.Socket): void {
     this.buffers.delete(socket);
+    this.handlers.delete(socket);
     for (const [id, s] of this.conns) {
       if (s === socket) this.conns.delete(id);
     }
@@ -205,7 +224,9 @@ export class ChatService extends EventEmitter {
       });
     });
     // 客户端的出站 socket 同样要监听 data/close，才能读对端回复（双向聊天）
-    socket.on('data', (chunk) => this.onData(socket, chunk));
+    const handler = (chunk: Buffer) => this.onData(socket, chunk);
+    this.handlers.set(socket, handler);
+    socket.on('data', handler);
     socket.once('error', (err) => {
       if (!settled) {
         settled = true;

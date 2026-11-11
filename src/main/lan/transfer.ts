@@ -2,7 +2,8 @@ import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { downloadsPath } from './env';import {
+import { downloadsPath } from './env';
+import {
   PROTO_VERSION,
   CHUNK_SIZE,
   LanHeader,
@@ -250,6 +251,9 @@ export class TransferService extends EventEmitter {
     let received = 0;
     let buf = Buffer.alloc(0);
 
+    // 文件传输期间该连接专用于文件：摘除 chat 的帧解析器，避免原始字节被当帧解析
+    this.chat.pauseFrames(socket);
+
     const onData = (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
       while (buf.length >= 4) {
@@ -258,23 +262,26 @@ export class TransferService extends EventEmitter {
         const block = buf.subarray(4, 4 + len);
         buf = buf.subarray(4 + len);
         received += block.length;
-        if (!ws.write(block)) {
-          // 背压：暂停 socket 直到 drain（简化：继续写，Node 内部会缓冲）
-        }
+        ws.write(block); // 背压交由 Node 内部缓冲（v1 简化）
         this.store.updateTransfer(transferId, { size: received });
         this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'receiving');
+        if (received >= size) {
+          finish(true);
+          return;
+        }
       }
     };
 
     const finish = (ok: boolean) => {
       socket.off('data', onData);
+      this.chat.resumeFrames(socket);
       ws.end(() => {
         if (ok) {
           try {
             if (fs.existsSync(partPath)) fs.renameSync(partPath, savePath);
             this.store.updateTransfer(transferId, { state: 'done', path: savePath });
             this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'done');
-          } catch (e) {
+          } catch {
             this.store.updateTransfer(transferId, { state: 'failed' });
             this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
           }
@@ -291,25 +298,7 @@ export class TransferService extends EventEmitter {
       });
     };
 
-    // 用一次性捕获 file-done 帧：但 beginReceive 复用了 socket 的 data，
-    // 而 chat 的 onData 也在监听该 socket。这里改用 socket 的 data 追加监听，
-    // 但 file-done 是 JSON 帧混在字节流里 —— 简化：发送方先发完所有字节块再接
-    // file-done；接收方按「收到 size 字节即完」判定，不必解析 file-done。
     socket.on('data', onData);
-    const checkDone = (chunk: Buffer) => {
-      // 过渡：实际由字节数判定，见 finish
-      void chunk;
-    };
-    socket.on('data', checkDone);
-
-    // 用字节数判定完成（发送方发完 size 字节后我们清 data 监听）
-    const allDoneWatcher = () => {
-      if (received >= size) {
-        finish(true);
-        socket.off('data', allDoneWatcher as any);
-      }
-    };
-    socket.on('data', allDoneWatcher as any);
     socket.once('close', () => {
       if (received < size) finish(false);
     });
