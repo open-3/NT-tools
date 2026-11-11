@@ -20,6 +20,7 @@ const suites = [
   { src: 'scripts/test-lan-e2e.ts', out: 'dist/test-lan.cjs' },
   { src: 'scripts/test-lan-transfer-e2e.ts', out: 'dist/test-lan-tx.cjs' },
   { src: 'scripts/test-lan-bigfile.ts', out: 'dist/test-lan-big.cjs' },
+  { src: 'scripts/test-lan-dir.ts', out: 'dist/test-lan-dir.cjs' },
 ];
 
 let failed = 0;

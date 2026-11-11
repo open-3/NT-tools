@@ -85,6 +85,7 @@ export class LanManager extends EventEmitter {
     this.chat?.on('message', () => this.emit('message'));
     this.transfer?.on('progress', (p) => this.emit('transfer-progress', p));
     this.transfer?.on('incoming-offer', (o) => this.emit('incoming-offer', o));
+    this.transfer?.on('message', () => this.emit('message'));
   }
 
   /** 释放一个引用；归零则停止 */

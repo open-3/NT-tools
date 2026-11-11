@@ -39,6 +39,8 @@ import { ChatService } from './chat';
 interface TransferEvents {
   'progress': [p: TransferProgress];
   'incoming-offer': [offer: IncomingOffer];
+  /** 收到文件（或发送完成）后需刷新聊天区，转发给上层 */
+  'message': [peerId: string];
 }
 
 export interface TransferProgress {
@@ -151,6 +153,8 @@ export class TransferService extends EventEmitter {
           meta: JSON.stringify({ fileName: name, size: stat.size, transferId }),
           ts: Date.now(),
         });
+        // 通知 UI 刷新聊天区，显示这条 out 文件消息
+        this.emit('message', peer.id);
         resolve();
       });
     });
@@ -185,7 +189,6 @@ export class TransferService extends EventEmitter {
       len.writeUInt32BE(buf.length, 0);
       socket.write(Buffer.concat([len, buf]));
       sent += buf.length;
-      this.store.updateTransfer(transferId, { size: sent });
       this.emitProgress(transferId, t.peer.id, 'out', name, t.size, sent, 'sending');
     });
     rs.on('end', () => {
@@ -278,8 +281,12 @@ export class TransferService extends EventEmitter {
     if (!row) return;
     const sock = socket ?? this.chat.getConnections().get(row.peer.id) ?? this.incomingSockets.get(transferId);
 
-    // savePath 兜底：未指定（UI 未点「更改目录」）时回退到默认下载目录 + 文件名
-    const dest = savePath || path.join(this.defaultSaveDir(), row.fileName);
+    // savePath 兜底：可能传入的是目录（UI「更改目录」选的）或完整文件名或 undefined。
+    // 统一归一化成「完整文件路径」：
+    //   - undefined → 默认下载目录 + 文件名
+    //   - 目录 → 该目录 + 文件名
+    //   - 完整文件名 → 原样
+    const dest = normalizeDest(savePath, row.fileName, this.defaultSaveDir());
 
     const reply: LanFileAccept = {
       v: PROTO_VERSION,
@@ -329,7 +336,6 @@ export class TransferService extends EventEmitter {
         buf = buf.subarray(4 + len);
         received += block.length;
         ws.write(block); // 背压交由 Node 内部缓冲（v1 简化）
-        this.store.updateTransfer(localTransferId, { size: received });
         this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'receiving');
         if (received >= size) {
           finish(true);
@@ -356,6 +362,8 @@ export class TransferService extends EventEmitter {
               meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath }),
               ts: Date.now(),
             });
+            // 通知 UI 刷新聊天区，显示这条 in 文件消息
+            this.emit('message', peer.id);
           } catch {
             this.store.updateTransfer(localTransferId, { state: 'failed' });
             this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
@@ -413,4 +421,22 @@ export class TransferService extends EventEmitter {
     this.incomingRows.clear();
     this.incomingSockets.clear();
   }
+}
+
+/**
+ * 把「可能传入的保存路径」归一化成完整文件路径：
+ *  - undefined → defaultDir + fileName
+ *  - 已存在的目录 → 该目录 + fileName
+ *  - 完整文件名（含扩展名，非目录）→ 原样返回
+ */
+function normalizeDest(savePath: string | undefined, fileName: string, defaultDir: string): string {
+  if (!savePath) return path.join(defaultDir, fileName);
+  try {
+    if (fs.statSync(savePath).isDirectory()) {
+      return path.join(savePath, fileName);
+    }
+  } catch {
+    /* 不存在：按完整文件名处理 */
+  }
+  return savePath;
 }
