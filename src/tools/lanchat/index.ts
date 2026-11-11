@@ -23,6 +23,7 @@ declare global {
       listInterfaces(): Promise<NetIface[]>;
       getSelectedInterface(): Promise<NetIface | null>;
       setNic(address: string | null): Promise<NetIface | null>;
+      setOnline(on: boolean): Promise<Snapshot>;
       on(cb: (channel: string, payload: unknown) => void): () => void;
     };
   }
@@ -51,7 +52,7 @@ interface Peer {
 }
 
 interface Snapshot {
-  self: { id: string; name: string; ip: string; tcpPort: number };
+  self: { id: string; name: string; ip: string; tcpPort: number; online: boolean };
   peers: Peer[];
 }
 
@@ -86,7 +87,7 @@ interface IncomingOffer {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-let snapshot: Snapshot = { self: { id: '', name: '', ip: '', tcpPort: 0 }, peers: [] };
+let snapshot: Snapshot = { self: { id: '', name: '', ip: '', tcpPort: 0, online: true }, peers: [] };
 let activePeerId: string | null = null;
 const transfers = new Map<number, TransferProgress>();
 
@@ -116,6 +117,22 @@ function renderSelf(): void {
   const s = snapshot.self;
   $('self-label').textContent = `🛜 ${s.name}`;
   $('self-ip').textContent = s.ip ? `${s.ip}:${s.tcpPort || '…'}` : '';
+  renderPresence(s.online);
+}
+
+function renderPresence(online: boolean): void {
+  const btn = $('btn-presence');
+  btn.textContent = online ? '● 在线' : '○ 隐身';
+  btn.dataset.online = online ? '1' : '0';
+}
+
+function togglePresence(): void {
+  const next = snapshot.self.online === false;
+  void window.lan.setOnline(next).then((s) => {
+    snapshot = s;
+    renderSelf();
+    renderPeers();
+  });
 }
 
 function renderPeers(): void {
@@ -407,6 +424,7 @@ async function boot(): Promise<void> {
   $('btn-send-msg').addEventListener('click', submitMessage);
   $('btn-send').addEventListener('click', sendFile);
   $('btn-broadcast').addEventListener('click', openBroadcast);
+  $('btn-presence').addEventListener('click', togglePresence);
   $('btn-refresh').addEventListener('click', () => {
     void window.lan.snapshot().then((s) => {
       snapshot = s;

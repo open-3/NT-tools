@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('lan', {
   start: () => ipcRenderer.invoke('lan:start'),
   stop: () => ipcRenderer.invoke('lan:stop'),
   snapshot: () => ipcRenderer.invoke('lan:snapshot'),
+  setOnline: (on: boolean) => ipcRenderer.invoke('lan:setOnline', on),
   sendChat: (peerId: string, text: string) => ipcRenderer.invoke('lan:sendChat', peerId, text),
   broadcast: (text: string) => ipcRenderer.invoke('lan:broadcast', text),
   sendFile: (peerId: string, filePath: string) => ipcRenderer.invoke('lan:sendFile', peerId, filePath),

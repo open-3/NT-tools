@@ -20,7 +20,7 @@ import { listInterfaces, selectBestInterface, NetInterface } from './netif';
  */
 
 export interface LanSnapshot {
-  self: { id: string; name: string; ip: string; tcpPort: number };
+  self: { id: string; name: string; ip: string; tcpPort: number; online: boolean };
   peers: PeerInfo[];
 }
 
@@ -108,6 +108,7 @@ export class LanManager extends EventEmitter {
         name: this.discovery?.name ?? '',
         ip: primaryIp(),
         tcpPort: this.chat?.port ?? 0,
+        online: this.discovery?.isOnline() ?? true,
       },
       peers: this.discovery?.list() ?? [],
     };
@@ -121,6 +122,11 @@ export class LanManager extends EventEmitter {
 
   getSnapshot(): LanSnapshot {
     return this.snapshot();
+  }
+
+  /** 在线/隐身切换 */
+  setOnline(on: boolean): void {
+    this.discovery?.setOnline(on);
   }
 
   async sendChat(peerId: string, text: string): Promise<void> {

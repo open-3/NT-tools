@@ -32,6 +32,8 @@ export class Discovery {
   private peers = new Map<string, PeerInfo>();
   private listeners = new Set<(peers: PeerInfo[]) => void>();
   private ownIps = new Set<string>();
+  /** 在线状态：false = 隐身（停止发 hello，只收不发，对端不会再看到本机） */
+  private online = true;
 
   constructor(
     private store: LanStore,
@@ -143,8 +145,40 @@ export class Discovery {
     });
   }
 
-  private sendHello(): void {
+  /** 设置在线/隐身；隐身时发 bye 告知对端并停止发 hello，恢复时立即补发 hello */
+  setOnline(on: boolean): void {
+    if (this.online === on) return;
+    this.online = on;
     if (!this.socket) return;
+    if (on) {
+      // 恢复在线：立即发一次 hello，让对端尽快重新发现
+      this.sendHello();
+    } else {
+      // 隐身：广播一次 bye，让对端尽快把本机标离线
+      const bye: LanHello = {
+        v: 1,
+        type: 'bye',
+        app: APP_ID,
+        id: this.selfId,
+        name: this.selfName,
+        tcpPort: this.tcpPort,
+        tsp: Date.now(),
+      };
+      try {
+        this.socket.send(JSON.stringify(bye), MULTICAST_PORT, MULTICAST_ADDR);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** 当前是否在线（用于 snapshot 状态展示） */
+  isOnline(): boolean {
+    return this.online;
+  }
+
+  private sendHello(): void {
+    if (!this.socket || !this.online) return;
     const hello: LanHello = {
       v: 1,
       type: 'hello',

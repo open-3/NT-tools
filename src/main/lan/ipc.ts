@@ -58,6 +58,11 @@ export function installLanIpc(): void {
     return true;
   });
 
+  ipcMain.handle('lan:setOnline', (_e, on: boolean) => {
+    lanManager.setOnline(on);
+    return lanManager.getSnapshot();
+  });
+
   ipcMain.handle('lan:snapshot', () => lanManager.getSnapshot());
 
   ipcMain.handle('lan:sendChat', (_e, peerId: string, text: string) => {

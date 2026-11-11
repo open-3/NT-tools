@@ -82,6 +82,16 @@ body {
 .lc-btn.primary:hover {
   background: #2563eb;
 }
+.lc-btn.lc-presence {
+  font-weight: 600;
+}
+.lc-btn.lc-presence[data-online='1'] {
+  color: var(--ok);
+  border-color: #a7f3d0;
+}
+.lc-btn.lc-presence[data-online='0'] {
+  color: var(--t3);
+}
 
 /* ---------- 主布局 ---------- */
 .lc-main {

@@ -20,16 +20,20 @@ import { ChatService } from './chat';
  * 文件传输（M2）：TCP 分块流式，256KB 分块，`.part` 临时文件，v1 不做断点续传。
  *
  * 流程：
- *  发送方 offer(peer, filePath) → 连对端 → 发 file-offer（含 transferId）
- *  接收方收到 file-offer → 建 pending 记录 → 若 autoAccept 直接 startReceive，
- *     否则上抛 'incoming-offer' 让 UI 让用户确认
- *  接收方 accept(transferId, ok, savePath) → 发 file-accept → 开始接收
- *  发送方收到 file-accept ok → 流式发字节块（每块 4 字节长度 + 二进制）→ file-done
- *  接收方收完校验字节数 → .part 改名 → done。
+ *  发送方 offer(peer, filePath) → 连对端 → 发 file-offer（含发送方本地 transferId）
+ *  接收方收到 file-offer → 建本地 pending 记录（本地另有 transferId）→
+ *     若 autoAccept 直接接收，否则上抛 'incoming-offer' 让 UI 确认
+ *  接收方 accept(senderTransferId, ok, savePath) → 发 file-accept（回 senderTransferId）→ 开始接收
+ *  发送方收到 file-accept ok → 流式发字节块（每块 4 字节长度 + 二进制）
+ *  接收方按字节数 received>=size 判定完成 → .part 改名 → done。
  *
- * 字节块不带 JSON 头，靠「accept 之后该 socket 上后续字节全是文件负载」约定。
- * 因 chat 与 transfer 共用 socket，文件传输期间该连接专用于文件（v1 简化：传文件
- * 时不复用同一连接发聊天，聊天走另一条连接或排队）。
+ * 关键约定：
+ *  - 「transferId」是发送方本地自增 id，跨端仅作关联键；接收方自身另有本地 id，
+ *    进度/落盘统一用本地 id，size 取自 file-offer 的 msg.size（不再反查表，避免撞 id）。
+ *  - 接收方不依赖 discovery 查找发送方（组播 3s 心跳有延迟，TCP 先到时可能查不到）：
+ *    peer 元数据（id/name）直接取自 file-offer 帧，socket 取自 handleFrame 传入参数。
+ *  - 字节块不带 JSON 头，靠「accept 之后该 socket 上后续字节全是文件负载」约定；
+ *    chat 与 transfer 共用 socket，文件传输期间该连接专用于文件。
  */
 
 interface TransferEvents {
@@ -48,7 +52,7 @@ export interface TransferProgress {
 }
 
 export interface IncomingOffer {
-  transferId: number;
+  transferId: number; // 发送方的 transferId（关联 acceptFile）
   peerId: string;
   peerName: string;
   fileName: string;
@@ -56,10 +60,26 @@ export interface IncomingOffer {
   kind: 'file' | 'dir';
 }
 
+interface OutgoingRow {
+  peer: PeerInfo;
+  path: string;
+  size: number;
+}
+
+interface IncomingRow {
+  peer: PeerInfo;
+  savePath: string;
+  /** 接收方本地 transfer 记录 id（用于进度/落盘，区别于发送方 transferId） */
+  localTransferId: number;
+  /** 文件总大小（取自 file-offer 的 size 字段） */
+  size: number;
+}
+
 export class TransferService extends EventEmitter {
   // 活动传输
-  private outgoing = new Map<number, { peer: PeerInfo; path: string; size: number }>();
-  private incomingRows = new Map<number, { peer: PeerInfo; savePath: string }>();
+  private outgoing = new Map<number, OutgoingRow>(); // 发送方 transferId -> row
+  /** 发送方 transferId -> 接收方本地行 */
+  private incomingRows = new Map<number, IncomingRow>();
 
   constructor(
     private store: LanStore,
@@ -73,7 +93,7 @@ export class TransferService extends EventEmitter {
   handleFrame(header: LanHeader, socket: net.Socket): void {
     switch (header.type) {
       case 'file-offer':
-        this.onOffer(header as LanFileOffer);
+        this.onOffer(header as LanFileOffer, socket);
         break;
       case 'file-accept':
         this.onAccept(header as LanFileAccept, socket);
@@ -86,7 +106,7 @@ export class TransferService extends EventEmitter {
 
   // ---------- 发送方 ----------
 
-  /** 发送方：向对端发起单文件传输 */
+  /** 发送方：向对端发起单文件传输，返回发送方本地 transferId */
   async offer(peer: PeerInfo, filePath: string): Promise<number> {
     const stat = fs.statSync(filePath);
     const name = path.basename(filePath);
@@ -120,6 +140,15 @@ export class TransferService extends EventEmitter {
           ts: Date.now(),
         };
         socket.write(encodeFrame(offer));
+        // 记录一条 out 文件消息，让对话框里能看到「已发送文件」
+        this.store.addMessage({
+          peerId: peer.id,
+          dir: 'out',
+          kind: 'file',
+          text: `文件：${name}（${stat.size} 字节）`,
+          meta: JSON.stringify({ fileName: name, size: stat.size, transferId }),
+          ts: Date.now(),
+        });
         resolve();
       });
     });
@@ -137,16 +166,14 @@ export class TransferService extends EventEmitter {
       this.emitProgress(msg.transferId, msg.id, 'out', path.basename(t.path), t.size, 0, 'failed');
       return;
     }
-    this.sendFileStream(msg.transferId, t);
+    this.sendFileStream(msg.transferId, t, socket);
   }
 
-  private sendFileStream(transferId: number, t: { peer: PeerInfo; path: string; size: number }): void {
+  private sendFileStream(transferId: number, t: OutgoingRow, socket: net.Socket): void {
     const name = path.basename(t.path);
-    const socket = this.chat.getConnections().get(t.peer.id);
-    if (!socket) {
-      this.store.updateTransfer(transferId, { state: 'failed' });
-      return;
-    }
+    // 文件传输期间该连接专用于文件：摘除 chat 的帧解析器（对称于接收方）
+    this.chat.pauseFrames(socket);
+
     const rs = fs.createReadStream(t.path, { highWaterMark: CHUNK_SIZE });
     let sent = 0;
 
@@ -169,11 +196,13 @@ export class TransferService extends EventEmitter {
         ok: true,
       };
       socket.write(encodeFrame(done));
+      this.chat.resumeFrames(socket);
       this.store.updateTransfer(transferId, { state: 'done' });
       this.emitProgress(transferId, t.peer.id, 'out', name, t.size, sent, 'done');
       this.outgoing.delete(transferId);
     });
-    rs.on('error', (err) => {
+    rs.on('error', () => {
+      this.chat.resumeFrames(socket);
       this.store.updateTransfer(transferId, { state: 'failed' });
       this.emitProgress(transferId, t.peer.id, 'out', name, t.size, sent, 'failed');
       this.outgoing.delete(transferId);
@@ -181,17 +210,26 @@ export class TransferService extends EventEmitter {
   }
 
   private onDone(msg: LanFileDone): void {
-    // 发送方收到接收方的 file-done 确认（v1 单文件可忽略）
+    // 发送方收到接收方的 file-done 确认（v1 单文件，发送方在 rs.on('end') 已自行结束）
     void msg;
   }
 
   // ---------- 接收方 ----------
 
-  private onOffer(msg: LanFileOffer): void {
-    const peer = this.discovery.get(msg.id);
-    if (!peer) return;
-    // 建接收 pending 记录
-    this.store.addTransfer({
+  private onOffer(msg: LanFileOffer, socket: net.Socket): void {
+    // 关键：不依赖 discovery 查找发送方（组播有延迟，TCP 先到时可能查不到）。
+    // peer 的 id/name 直接来自 file-offer 帧；后续拿 socket 用 handleFrame 传入的参数。
+    const peer: PeerInfo = {
+      id: msg.id,
+      name: msg.name,
+      ip: '',
+      tcpPort: 0,
+      lastSeen: Date.now(),
+      online: true,
+    };
+
+    // 接收方本地 transfer 记录（本地自增 id，区别于发送方的 msg.transferId）
+    const localTransferId = this.store.addTransfer({
       peerId: msg.id,
       dir: 'in',
       kind: msg.kind,
@@ -201,10 +239,16 @@ export class TransferService extends EventEmitter {
       path: '',
       ts: Date.now(),
     });
-    this.incomingRows.set(msg.transferId, { peer, savePath: '' });
+
+    this.incomingRows.set(msg.transferId, {
+      peer,
+      savePath: '',
+      localTransferId,
+      size: msg.size,
+    });
 
     const offer: IncomingOffer = {
-      transferId: msg.transferId,
+      transferId: msg.transferId, // 发送方 transferId，用于 acceptFile 关联
       peerId: msg.id,
       peerName: msg.name,
       fileName: msg.fileName,
@@ -212,20 +256,24 @@ export class TransferService extends EventEmitter {
       kind: msg.kind,
     };
 
-    // 记住了直接接收，否则让用户确认
     if (this.store.isAutoAccept(msg.id)) {
       const savePath = path.join(this.defaultSaveDir(), msg.fileName);
-      this.accept(msg.transferId, true, savePath);
+      this.accept(msg.transferId, true, savePath, socket);
     } else {
       this.emit('incoming-offer', offer);
+      // 记住这个 socket（accept 时可能已不是同一连接引用，但 v1 相同 peer 复用连接）
+      this.incomingSockets.set(msg.transferId, socket);
     }
   }
 
+  /** 发送方 transferId -> 收到 offer 时的 socket（供 accept 使用） */
+  private incomingSockets = new Map<number, net.Socket>();
+
   /** 接收方：应答并开始接收 */
-  accept(transferId: number, ok: boolean, savePath?: string): void {
+  accept(transferId: number, ok: boolean, savePath?: string, socket?: net.Socket): void {
     const row = this.incomingRows.get(transferId);
     if (!row) return;
-    const socket = this.chat.getConnections().get(row.peer.id);
+    const sock = socket ?? this.chat.getConnections().get(row.peer.id) ?? this.incomingSockets.get(transferId);
 
     const reply: LanFileAccept = {
       v: PROTO_VERSION,
@@ -236,16 +284,28 @@ export class TransferService extends EventEmitter {
       ok,
       reason: ok ? undefined : '用户拒绝',
     };
-    socket?.write(encodeFrame(reply));
+    sock?.write(encodeFrame(reply));
 
-    if (ok && savePath && socket) {
-      this.beginReceive(transferId, row.peer, savePath, socket);
+    if (ok && savePath && sock) {
+      this.beginReceive(transferId, row, savePath, sock);
+    } else if (!ok) {
+      // 拒绝：标记本地记录失败并清理
+      this.store.updateTransfer(row.localTransferId, { state: 'failed' });
+      this.emitProgress(row.localTransferId, row.peer.id, 'in', path.basename(savePath ?? row.peer.name), row.size, 0, 'failed');
+      this.incomingRows.delete(transferId);
+      this.incomingSockets.delete(transferId);
     }
   }
 
-  private beginReceive(transferId: number, peer: PeerInfo, savePath: string, socket: net.Socket): void {
-    this.incomingRows.set(transferId, { peer, savePath });
-    const size = this.incomingSize(transferId);
+  private beginReceive(
+    senderTransferId: number,
+    row: IncomingRow,
+    savePath: string,
+    socket: net.Socket,
+  ): void {
+    row.savePath = savePath;
+    this.incomingSockets.delete(senderTransferId);
+    const { peer, localTransferId, size } = row;
     const partPath = savePath + '.part';
     const ws = fs.createWriteStream(partPath);
     let received = 0;
@@ -263,8 +323,8 @@ export class TransferService extends EventEmitter {
         buf = buf.subarray(4 + len);
         received += block.length;
         ws.write(block); // 背压交由 Node 内部缓冲（v1 简化）
-        this.store.updateTransfer(transferId, { size: received });
-        this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'receiving');
+        this.store.updateTransfer(localTransferId, { size: received });
+        this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'receiving');
         if (received >= size) {
           finish(true);
           return;
@@ -279,11 +339,20 @@ export class TransferService extends EventEmitter {
         if (ok) {
           try {
             if (fs.existsSync(partPath)) fs.renameSync(partPath, savePath);
-            this.store.updateTransfer(transferId, { state: 'done', path: savePath });
-            this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'done');
+            this.store.updateTransfer(localTransferId, { state: 'done', path: savePath });
+            this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'done');
+            // 记录一条 in 文件消息，让对话框里能看到「收到文件」
+            this.store.addMessage({
+              peerId: peer.id,
+              dir: 'in',
+              kind: 'file',
+              text: `文件：${path.basename(savePath)}（${size} 字节）`,
+              meta: JSON.stringify({ fileName: path.basename(savePath), size, savePath }),
+              ts: Date.now(),
+            });
           } catch {
-            this.store.updateTransfer(transferId, { state: 'failed' });
-            this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
+            this.store.updateTransfer(localTransferId, { state: 'failed' });
+            this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
           }
         } else {
           try {
@@ -291,10 +360,10 @@ export class TransferService extends EventEmitter {
           } catch {
             /* ignore */
           }
-          this.store.updateTransfer(transferId, { state: 'failed' });
-          this.emitProgress(transferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
+          this.store.updateTransfer(localTransferId, { state: 'failed' });
+          this.emitProgress(localTransferId, peer.id, 'in', path.basename(savePath), size, received, 'failed');
         }
-        this.incomingRows.delete(transferId);
+        this.incomingRows.delete(senderTransferId);
       });
     };
 
@@ -302,12 +371,6 @@ export class TransferService extends EventEmitter {
     socket.once('close', () => {
       if (received < size) finish(false);
     });
-  }
-
-  private incomingSize(transferId: number): number {
-    const rows = this.store.getRecentTransfers(200);
-    const row = rows.find((r) => r.id === transferId);
-    return row?.size ?? 0;
   }
 
   private defaultSaveDir(): string {
@@ -342,5 +405,6 @@ export class TransferService extends EventEmitter {
   stop(): void {
     this.outgoing.clear();
     this.incomingRows.clear();
+    this.incomingSockets.clear();
   }
 }
