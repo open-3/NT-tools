@@ -69,6 +69,8 @@ interface OutgoingRow {
 interface IncomingRow {
   peer: PeerInfo;
   savePath: string;
+  /** 文件名（取自 file-offer 的 fileName，用于兜底默认保存路径） */
+  fileName: string;
   /** 接收方本地 transfer 记录 id（用于进度/落盘，区别于发送方 transferId） */
   localTransferId: number;
   /** 文件总大小（取自 file-offer 的 size 字段） */
@@ -243,6 +245,7 @@ export class TransferService extends EventEmitter {
     this.incomingRows.set(msg.transferId, {
       peer,
       savePath: '',
+      fileName: msg.fileName,
       localTransferId,
       size: msg.size,
     });
@@ -275,6 +278,9 @@ export class TransferService extends EventEmitter {
     if (!row) return;
     const sock = socket ?? this.chat.getConnections().get(row.peer.id) ?? this.incomingSockets.get(transferId);
 
+    // savePath 兜底：未指定（UI 未点「更改目录」）时回退到默认下载目录 + 文件名
+    const dest = savePath || path.join(this.defaultSaveDir(), row.fileName);
+
     const reply: LanFileAccept = {
       v: PROTO_VERSION,
       type: 'file-accept',
@@ -286,12 +292,12 @@ export class TransferService extends EventEmitter {
     };
     sock?.write(encodeFrame(reply));
 
-    if (ok && savePath && sock) {
-      this.beginReceive(transferId, row, savePath, sock);
+    if (ok && sock) {
+      this.beginReceive(transferId, row, dest, sock);
     } else if (!ok) {
       // 拒绝：标记本地记录失败并清理
       this.store.updateTransfer(row.localTransferId, { state: 'failed' });
-      this.emitProgress(row.localTransferId, row.peer.id, 'in', path.basename(savePath ?? row.peer.name), row.size, 0, 'failed');
+      this.emitProgress(row.localTransferId, row.peer.id, 'in', row.fileName, row.size, 0, 'failed');
       this.incomingRows.delete(transferId);
       this.incomingSockets.delete(transferId);
     }
