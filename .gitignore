@@ -31,3 +31,4 @@ desktop.ini
 *.png
 !build/icon.png
 !src/tools/**/preview.png
+.shim7za/
