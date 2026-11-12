@@ -29,6 +29,7 @@ export interface MessageRow {
   text: string;
   meta: string; // JSON：文件名/大小等
   ts: number;
+  read: number; // 0/1：对方发来的消息是否已读（未读标记用）
 }
 
 export interface TransferRow {
@@ -68,7 +69,8 @@ export class LanStore {
         kind TEXT NOT NULL DEFAULT 'text',
         text TEXT NOT NULL DEFAULT '',
         meta TEXT NOT NULL DEFAULT '',
-        ts INTEGER NOT NULL
+        ts INTEGER NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_messages_peer ON messages(peerId, ts);
       CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(ts);
@@ -89,6 +91,21 @@ export class LanStore {
         value TEXT NOT NULL DEFAULT ''
       );
     `);
+
+    // 迁移：旧库可能没有 read 列，检测并补充
+    this.ensureColumn('messages', 'read', 'INTEGER NOT NULL DEFAULT 0');
+  }
+
+  /** 若表缺某列则 ALTER TABLE 补充（SQLite 3.35+ 支持 ADD COLUMN）。 */
+  private ensureColumn(table: string, column: string, ddl: string): void {
+    try {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === column)) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      }
+    } catch {
+      /* 忽略：列已存在或数据库受限 */
+    }
   }
 
   /** 读取设置项 */
@@ -142,10 +159,10 @@ export class LanStore {
     return this.getPeer(id)?.autoAccept === 1;
   }
 
-  addMessage(m: Omit<MessageRow, 'id'>): number {
+  addMessage(m: Omit<MessageRow, 'id' | 'read'> & { read?: number }): number {
     const r = this.db
-      .prepare('INSERT INTO messages (peerId, dir, kind, text, meta, ts) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(m.peerId, m.dir, m.kind, m.text, m.meta, m.ts);
+      .prepare('INSERT INTO messages (peerId, dir, kind, text, meta, ts, read) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(m.peerId, m.dir, m.kind, m.text, m.meta, m.ts, m.read ?? 0);
     return Number(r.lastInsertRowid);
   }
 
@@ -171,6 +188,19 @@ export class LanStore {
     return this.db
       .prepare('SELECT * FROM messages WHERE peerId = ? ORDER BY ts DESC LIMIT ?')
       .all(peerId, limit) as unknown as MessageRow[];
+  }
+
+  /** 把某对端发来的所有消息标记为已读 */
+  markRead(peerId: string): void {
+    this.db.prepare('UPDATE messages SET read = 1 WHERE peerId = ? AND dir = ?').run(peerId, 'in');
+  }
+
+  /** 某对端未读消息数 */
+  getUnreadCount(peerId: string): number {
+    const r = this.db
+      .prepare('SELECT COUNT(*) AS c FROM messages WHERE peerId = ? AND dir = ? AND read = 0')
+      .get(peerId, 'in') as { c: number } | undefined;
+    return r?.c ?? 0;
   }
 
   addTransfer(t: Omit<TransferRow, 'id'>): number {

@@ -86,6 +86,19 @@ export function installLanIpc(): void {
     return lanManager.getMessages(peerId, limit ?? 200);
   });
 
+  ipcMain.handle('lan:markRead', (_e, peerId: string) => {
+    lanManager.markRead(peerId);
+    return true;
+  });
+
+  ipcMain.handle('lan:unreadCount', (_e, peerId: string) => {
+    return lanManager.getUnreadCount(peerId);
+  });
+
+  ipcMain.handle('lan:unreadMap', () => {
+    return lanManager.getUnreadMap();
+  });
+
   ipcMain.handle('lan:listInterfaces', () => {
     return lanManager.listInterfaces();
   });

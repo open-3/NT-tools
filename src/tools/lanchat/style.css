@@ -163,6 +163,9 @@ body {
   border-bottom: 1px solid #f0f1f3;
   cursor: pointer;
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .lc-peer:hover {
   background: #f3f4f6;
@@ -171,6 +174,10 @@ body {
   background: var(--acc-soft);
   border-left: 3px solid var(--acc);
   padding-left: 9px;
+}
+.lc-peer .pbody {
+  flex: 1;
+  min-width: 0;
 }
 .lc-peer .pname {
   font-size: 13px;
@@ -198,15 +205,25 @@ body {
   background: #cbd5e1;
 }
 .lc-badge {
-  position: absolute;
-  top: 8px;
-  right: 10px;
+  flex: none;
   background: var(--danger);
   color: #fff;
   font-size: 10px;
   border-radius: 9px;
   padding: 1px 6px;
   line-height: 14px;
+}
+.lc-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
 .lc-empty {
   padding: 24px 12px;
@@ -239,6 +256,38 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+/* 一行消息 = 头像 + 气泡 */
+.lc-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.lc-row.out {
+  flex-direction: row-reverse;
+}
+.lc-bubble {
+  max-width: 66%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+  background: #f1f3f5;
+  color: var(--t1);
+  border-bottom-left-radius: 3px;
+}
+.lc-bubble.out {
+  background: var(--acc);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+  border-bottom-left-radius: 12px;
+}
+.lc-bubble .mt {
+  display: block;
+  font-size: 10px;
+  opacity: 0.55;
+  margin-top: 3px;
+}
 .lc-msg {
   max-width: 72%;
   padding: 8px 12px;
@@ -249,13 +298,6 @@ body {
   align-self: flex-start;
   background: #f1f3f5;
   border-bottom-left-radius: 3px;
-}
-.lc-msg.out {
-  align-self: flex-end;
-  background: var(--acc);
-  color: #fff;
-  border-bottom-right-radius: 3px;
-  border-bottom-left-radius: 12px;
 }
 .lc-msg .mt {
   display: block;
@@ -290,17 +332,17 @@ body {
   border-color: #b6d4fe;
 }
 
-/* ---------- 文件消息（内联进度 + 路径 + 右键） ---------- */
-.lc-msg.file {
+/* ---------- 文件消息（内联进度 + 路径 + 右键 + 接收确认） ---------- */
+.lc-bubble.file {
   cursor: default;
   min-width: 180px;
 }
-.lc-msg.file .frow {
+.lc-bubble.file .frow {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.lc-msg.file .fpath {
+.lc-bubble.file .fpath {
   font-size: 10.5px;
   opacity: 0.72;
   margin-top: 3px;
@@ -308,7 +350,7 @@ body {
   font-family: var(--mono);
   user-select: text;
 }
-.lc-msg.file .fprog {
+.lc-bubble.file .fprog {
   margin-top: 6px;
 }
 .fbar {
@@ -317,7 +359,7 @@ body {
   border-radius: 4px;
   overflow: hidden;
 }
-.lc-msg.file.out .fbar {
+.lc-bubble.file.out .fbar {
   background: rgba(255, 255, 255, 0.28);
 }
 .fbar i {
@@ -326,13 +368,26 @@ body {
   background: var(--acc);
   transition: width 0.15s;
 }
-.lc-msg.file.out .fbar i {
+.lc-bubble.file.out .fbar i {
   background: #fff;
 }
 .fstate {
   font-size: 11px;
   margin-top: 4px;
   opacity: 0.78;
+}
+
+/* 待接收请求的操作按钮 */
+.foffer-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.lc-btn.small {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  border-radius: 5px;
 }
 
 /* ---------- 文件右键菜单 ---------- */

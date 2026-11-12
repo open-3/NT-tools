@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('lan', {
   acceptFile: (transferId: number, ok: boolean, savePath?: string) =>
     ipcRenderer.invoke('lan:acceptFile', transferId, ok, savePath),
   messages: (peerId: string, limit?: number) => ipcRenderer.invoke('lan:messages', peerId, limit),
+  markRead: (peerId: string) => ipcRenderer.invoke('lan:markRead', peerId),
+  unreadCount: (peerId: string) => ipcRenderer.invoke('lan:unreadCount', peerId),
+  unreadMap: () => ipcRenderer.invoke('lan:unreadMap'),
   pickFile: () => ipcRenderer.invoke('lan:pickFile'),
   pickDir: () => ipcRenderer.invoke('lan:pickDir'),
   listInterfaces: () => ipcRenderer.invoke('lan:listInterfaces'),

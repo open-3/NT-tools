@@ -18,6 +18,9 @@ declare global {
       sendFile(peerId: string, filePath: string): Promise<number>;
       acceptFile(transferId: number, ok: boolean, savePath?: string): Promise<boolean>;
       messages(peerId: string, limit?: number): Promise<Message[]>;
+      markRead(peerId: string): Promise<boolean>;
+      unreadCount(peerId: string): Promise<number>;
+      unreadMap(): Promise<Record<string, number>>;
       pickFile(): Promise<string | null>;
       pickDir(): Promise<string | null>;
       listInterfaces(): Promise<NetIface[]>;
@@ -65,6 +68,7 @@ interface Message {
   text: string;
   meta: string;
   ts: number;
+  read: number;
 }
 
 interface TransferProgress {
@@ -91,14 +95,36 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 let snapshot: Snapshot = { self: { id: '', name: '', ip: '', tcpPort: 0, online: true }, peers: [] };
 let activePeerId: string | null = null;
 const transfers = new Map<number, TransferProgress>();
+/** 待确认的文件接收请求（通过 incoming-offer 事件维护，内联渲染在对话框） */
+const pendingOffers = new Map<number, IncomingOffer>();
+/** 每个对端的未读计数（peerId → count） */
+const unread = new Map<string, number>();
 
 /* ---------- 工具函数 ---------- */
 
+/** 完整时间（年月日 + 时分） */
 function fmtTime(ts: number): string {
   const d = new Date(ts);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  return `${y}-${mo}-${dd} ${hh}:${mm}`;
+}
+
+/** 取名字首个字符（字母/数字/汉字）做头像 */
+function avatarChar(name: string): string {
+  const s = name.trim();
+  if (!s) return '?';
+  return s[0];
+}
+
+/** 由名字稳定生成一个颜色（HSL 色相），用于头像底色区分不同设备 */
+function avatarHue(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
 }
 
 function fmtSize(n: number): string {
@@ -150,11 +176,17 @@ function renderPeers(): void {
     .map((p) => {
       const active = p.id === activePeerId ? ' active' : '';
       const dot = p.online ? '' : ' off';
+      const c = unread.get(p.id) ?? 0;
+      const badge = c > 0 ? `<span class="lc-badge">${c > 99 ? '99+' : c}</span>` : '';
       return `
         <div class="lc-peer${active}" data-id="${esc(p.id)}">
+          <span class="lc-avatar" data-hue="${avatarHue(p.name)}">${esc(avatarChar(p.name))}</span>
+          <div class="pbody">
+            <div class="pname">${esc(p.name)}</div>
+            <div class="pip">${esc(p.ip)} · ${p.online ? '在线' : '离线'}</div>
+          </div>
           <span class="lc-dot${dot}"></span>
-          <div class="pname">${esc(p.name)}</div>
-          <div class="pip">${esc(p.ip)} · ${p.online ? '在线' : '离线'}</div>
+          ${badge}
         </div>`;
     })
     .join('');
@@ -166,12 +198,21 @@ function renderPeers(): void {
       if (peer && peer.online) void selectPeer(id);
     };
   });
+
+  // 头像底色用 CSSOM 设置（hue 是动态值，CSP 禁 inline style）
+  box.querySelectorAll<HTMLElement>('.lc-avatar').forEach((el) => {
+    el.style.backgroundColor = `hsl(${el.dataset.hue ?? 0} 60% 88%)`;
+    el.style.color = `hsl(${el.dataset.hue ?? 0} 55% 32%)`;
+  });
 }
 
 async function selectPeer(peerId: string): Promise<void> {
   activePeerId = peerId;
   const peer = snapshot.peers.find((p) => p.id === peerId);
   $('chat-title').textContent = peer ? `${peer.name} · ${peer.ip}` : '选择设备';
+  // 进入对话即清除未读
+  unread.delete(peerId);
+  void window.lan.markRead(peerId);
   renderPeers();
   await renderMessages();
 }
@@ -182,17 +223,74 @@ async function renderMessages(): Promise<void> {
     box.innerHTML = '<div class="lc-msg centered">选择左侧在线设备开始聊天</div>';
     return;
   }
+  const peer = snapshot.peers.find((p) => p.id === activePeerId);
+  const peerName = peer?.name ?? '对端';
   const msgs = await window.lan.messages(activePeerId, 200);
   const sorted = [...msgs].reverse(); // store 返回时间降序，转升序
-  box.innerHTML = sorted.length
-    ? sorted.map(renderMessage).join('')
+
+  // 待确认的接收请求（内联到对话框，追加在消息末尾）
+  const offers = [...pendingOffers.values()].filter((o) => o.peerId === activePeerId);
+
+  const parts: string[] = sorted.map((m) => renderMessage(m, peerName));
+  for (const o of offers) parts.push(renderPendingOffer(o));
+  box.innerHTML = parts.length
+    ? parts.join('')
     : '<div class="lc-msg centered">还没有消息，打个招呼吧</div>';
 
   // 文件消息：内联进度条 + 右键菜单（CSP 禁 inline style，用 CSSOM + 事件绑定）
-  box.querySelectorAll<HTMLElement>('.lc-msg.file').forEach((el) => {
+  box.querySelectorAll<HTMLElement>('.lc-bubble.file').forEach((el) => {
     bindFileMessage(el);
   });
+  // 待确认请求：绑定接收/拒绝按钮
+  box.querySelectorAll<HTMLElement>('.lc-offer').forEach((el) => {
+    bindOffer(el);
+  });
+  // 头像底色 + 文字色
+  box.querySelectorAll<HTMLElement>('.lc-avatar').forEach((el) => {
+    el.style.backgroundColor = `hsl(${el.dataset.hue ?? 0} 60% 88%)`;
+    el.style.color = `hsl(${el.dataset.hue ?? 0} 55% 32%)`;
+  });
   box.scrollTop = box.scrollHeight;
+}
+
+/** 待确认接收请求的气泡（含接收/拒绝/更改目录按钮） */
+function renderPendingOffer(o: IncomingOffer): string {
+  const avatar = avatarHtml(o.peerName);
+  return `
+    <div class="lc-row">
+      ${avatar}
+      <div class="lc-bubble file lc-offer" data-transfer-id="${o.transferId}" data-peer-id="${esc(o.peerId)}">
+        <div class="frow">📄 ${esc(o.fileName)}</div>
+        <div class="fpath">${fmtSize(o.size)} · 待接收</div>
+        <div class="foffer-actions">
+          <button class="lc-btn small" data-act="reject">拒绝</button>
+          <button class="lc-btn small" data-act="change">更改目录</button>
+          <button class="lc-btn small primary" data-act="accept">接收</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindOffer(el: HTMLElement): void {
+  const transferId = Number(el.dataset.transferId ?? '0');
+  const peerId = el.dataset.peerId ?? '';
+  let savePath: string | null = null;
+
+  el.querySelector('[data-act="accept"]')?.addEventListener('click', () => {
+    pendingOffers.delete(transferId);
+    void window.lan.acceptFile(transferId, true, savePath ?? undefined);
+    void renderMessages();
+  });
+  el.querySelector('[data-act="reject"]')?.addEventListener('click', () => {
+    pendingOffers.delete(transferId);
+    void window.lan.acceptFile(transferId, false);
+    void renderMessages();
+  });
+  el.querySelector('[data-act="change"]')?.addEventListener('click', () => {
+    void window.lan.pickDir().then((dir) => {
+      if (dir) savePath = dir;
+    });
+  });
 }
 
 /** 解析文件消息的 meta JSON */
@@ -204,25 +302,37 @@ function parseFileMeta(meta: string): { fileName?: string; size?: number; savePa
   }
 }
 
-function renderMessage(m: Message): string {
+/** 头像气泡（发送方/接收方各一个） */
+function avatarHtml(name: string): string {
+  return `<span class="lc-avatar" data-hue="${avatarHue(name)}">${esc(avatarChar(name))}</span>`;
+}
+
+function renderMessage(m: Message, peerName: string): string {
   if (m.kind === 'broadcast') {
     return `<div class="lc-msg centered">📢 ${esc(m.text)}</div>`;
   }
   if (m.kind === 'file') {
     const meta = parseFileMeta(m.meta);
-    const state = meta.state ?? 'done';
     const filePath = meta.savePath ?? meta.path ?? '';
-    // 活动传输（sending/receiving）在消息下方渲染进度条
     const progress = buildFileProgress(m, meta);
-    return `
-      <div class="lc-msg file ${m.dir === 'out' ? 'out' : ''}" data-id="${m.id}" data-path="${esc(filePath)}" data-transfer-id="${meta.transferId ?? ''}" data-state="${esc(state)}" data-dir="${m.dir}">
+    const isOut = m.dir === 'out';
+    const avatar = isOut ? avatarHtml(snapshot.self.name) : avatarHtml(peerName);
+    const body = `
         <div class="frow">📄 ${esc(m.text)}</div>
         ${filePath ? `<div class="fpath" title="${esc(filePath)}">${esc(filePath)}</div>` : ''}
         ${progress}
-        <span class="mt">${fmtTime(m.ts)}</span>
-      </div>`;
+        <span class="mt">${fmtTime(m.ts)}</span>`;
+    const bubble = `<div class="lc-bubble file" data-id="${m.id}" data-path="${esc(filePath)}" data-transfer-id="${meta.transferId ?? ''}" data-state="${esc(meta.state ?? 'done')}" data-dir="${m.dir}">${body}</div>`;
+    return isOut
+      ? `<div class="lc-row out">${bubble}${avatar}</div>`
+      : `<div class="lc-row">${avatar}${bubble}</div>`;
   }
-  return `<div class="lc-msg ${m.dir === 'out' ? 'out' : ''}">${esc(m.text)}<span class="mt">${fmtTime(m.ts)}</span></div>`;
+  const isOut = m.dir === 'out';
+  const avatar = isOut ? avatarHtml(snapshot.self.name) : avatarHtml(peerName);
+  const bubble = `<div class="lc-bubble ${isOut ? 'out' : ''}">${esc(m.text)}<span class="mt">${fmtTime(m.ts)}</span></div>`;
+  return isOut
+    ? `<div class="lc-row out">${bubble}${avatar}</div>`
+    : `<div class="lc-row">${avatar}${bubble}</div>`;
 }
 
 /**
@@ -306,6 +416,16 @@ function appendIncomingMessage(): void {
   if (activePeerId) void renderMessages();
 }
 
+/** 收到对方消息时的未读处理：非当前对话 → 未读 +1 并刷新侧栏红点 */
+function onIncomingMessage(peerId: string): void {
+  if (peerId && peerId !== activePeerId) {
+    unread.set(peerId, (unread.get(peerId) ?? 0) + 1);
+    renderPeers();
+  } else if (activePeerId) {
+    void renderMessages();
+  }
+}
+
 function submitMessage(): void {
   const input = $<HTMLInputElement>('msg-input');
   const text = input.value.trim();
@@ -363,29 +483,11 @@ function showError(msg: string): void {
   setTimeout(() => el.remove(), 3000);
 }
 
-/* 接收确认弹窗 */
-let pendingOffer: IncomingOffer | null = null;
-let acceptSavePath: string | null = null;
-
-function showAcceptModal(offer: IncomingOffer): void {
-  pendingOffer = offer;
-  acceptSavePath = null;
-  $('modal-title').textContent = '收到文件';
-  $('modal-desc').textContent = `${offer.peerName} 想发送 ${offer.fileName}（${fmtSize(offer.size)}）`;
-  $('modal').hidden = false;
-}
-
-function acceptFile(ok: boolean): void {
-  if (!pendingOffer) return;
-  const offer = pendingOffer;
-  if (ok) {
-    void window.lan.acceptFile(offer.transferId, true, acceptSavePath ?? undefined);
-  } else {
-    void window.lan.acceptFile(offer.transferId, false);
-  }
-  $('modal').hidden = true;
-  pendingOffer = null;
-  acceptSavePath = null;
+/* 接收确认（改为内联到对话框：incoming-offer 事件进 pendingOffers，渲染时附加在消息末尾） */
+function showAcceptInline(offer: IncomingOffer): void {
+  pendingOffers.set(offer.transferId, offer);
+  // 若当前正在看该对端的对话，立即刷新显示；否则靠侧栏未读提示
+  if (offer.peerId === activePeerId) void renderMessages();
 }
 
 /* ---------- 网卡选择 ---------- */
@@ -450,9 +552,13 @@ async function boot(): Promise<void> {
         renderSelf();
         renderPeers();
         break;
-      case 'message':
-        appendIncomingMessage();
+      case 'message': {
+        // message 事件可能带 peerId（见 wire 的 emit('message')，暂不带），
+        // 无法确定来源时用当前快照容差处理：直接刷新 + 重算未读。
+        void refreshUnread().then(() => renderPeers());
+        if (activePeerId) void renderMessages();
         break;
+      }
       case 'transfer-progress': {
         const p = payload as TransferProgress;
         transfers.set(p.transferId, p);
@@ -461,13 +567,15 @@ async function boot(): Promise<void> {
         break;
       }
       case 'incoming-offer':
-        showAcceptModal(payload as IncomingOffer);
+        showAcceptInline(payload as IncomingOffer);
         break;
     }
   });
 
   snapshot = await window.lan.start();
   renderSelf();
+  renderPeers();
+  await refreshUnread();
   renderPeers();
   await renderMessages();
   await renderNicSelector();
@@ -489,20 +597,21 @@ async function boot(): Promise<void> {
     });
   });
 
-  // 弹窗
+  // 广播弹窗
   $('bc-send').addEventListener('click', sendBroadcast);
   $('bc-cancel').addEventListener('click', () => ($('bc-modal').hidden = true));
   $('bc-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendBroadcast();
   });
+}
 
-  $('modal-accept').addEventListener('click', () => acceptFile(true));
-  $('modal-reject').addEventListener('click', () => acceptFile(false));
-  $('modal-change').addEventListener('click', () => {
-    void window.lan.pickDir().then((dir) => {
-      if (dir) acceptSavePath = dir;
-    });
-  });
+/** 从主进程拉取所有对端的未读计数，更新本地 unread Map */
+async function refreshUnread(): Promise<void> {
+  const map = await window.lan.unreadMap();
+  for (const [id, c] of Object.entries(map)) {
+    if (c > 0) unread.set(id, c);
+    else unread.delete(id);
+  }
 }
 
 void boot();

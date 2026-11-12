@@ -157,6 +157,26 @@ export class LanManager extends EventEmitter {
     return this.store.getMessages(peerId, limit);
   }
 
+  /** 把某对端发来的消息标记为已读 */
+  markRead(peerId: string): void {
+    this.store.markRead(peerId);
+  }
+
+  /** 某对端未读消息数 */
+  getUnreadCount(peerId: string): number {
+    return this.store.getUnreadCount(peerId);
+  }
+
+  /** 所有对端的未读消息计数（peerId → 未读数） */
+  getUnreadMap(): Record<string, number> {
+    const map: Record<string, number> = {};
+    for (const p of this.discovery?.list() ?? []) {
+      const c = this.store.getUnreadCount(p.id);
+      if (c > 0) map[p.id] = c;
+    }
+    return map;
+  }
+
   /** 列出可选网卡（供 UI 下拉） */
   listInterfaces(): NetInterface[] {
     return listInterfaces();
