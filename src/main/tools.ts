@@ -62,7 +62,7 @@ export const TOOLS: ToolDef[] = [
   // 其他小工具
   { id: 'cheatsheet', label: '终端小抄', icon: '⌘', size: { width: 740, height: 760 } },
   // 局域网通信（聊天 + 传文件，专属 preload）
-  { id: 'lanchat', label: '局域网通信', icon: '🛜', size: { width: 860, height: 640 } },
+  { id: 'lanchat', label: '内网通', icon: '🛜', size: { width: 860, height: 640 } },
 ];
 
 /** 每个工具当前打开的窗口列表（按 id 分组，窗口关闭时移除） */

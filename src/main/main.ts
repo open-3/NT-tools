@@ -429,7 +429,7 @@ function buildTrayMenu(): void {
     },
     { type: 'separator' },
     {
-      label: '🛜 局域网通信',
+      label: '🛜 内网通',
       click: () => openTool('lanchat'),
     },
     {
