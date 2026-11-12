@@ -110,6 +110,35 @@ async function main(): Promise<void> {
 
   chatA.stop();
   chatB.stop();
+
+  // ---------- 3b) 长文本（跨多个 TCP 包）定向聊天 ----------
+  process.env.AGENT_PULSE_LAN_DB = path.join(root, 'lan.db');
+  const storeA3 = new LanStore();
+  process.env.AGENT_PULSE_LAN_DB = path.join(root, 'lan-b3.db');
+  const storeB3 = new LanStore();
+  process.env.AGENT_PULSE_LAN_DB = path.join(root, 'lan.db');
+
+  const chatA3 = new ChatService(storeA3, idA, 'hostA');
+  const chatB3 = new ChatService(storeB3, idB, 'hostB');
+  chatB3.start();
+  const portB3 = await new Promise<number>((resolve) => chatB3.once('listening', (p: number) => resolve(p)));
+
+  // 构造一段约 12KB 的长文本（超过典型单次 TCP 段，会被拆成多包；远小于 64KB 帧头上限）
+  const longText = 'package com.demo; // 长文本测试\n' + 'x'.repeat(12 * 1024);
+  let gotLong = '';
+  chatB3.on('message', (m: any) => {
+    if (m.text.startsWith('package com.demo;')) gotLong = m.text;
+  });
+
+  const peerB3 = { id: idB, name: 'hostB', ip: '127.0.0.1', tcpPort: portB3, lastSeen: Date.now(), online: true };
+  await chatA3.sendChat(peerB3, longText, 'text');
+  await new Promise((r) => setTimeout(r, 800));
+  ok('长文本（12KB，跨多包）完整送达', gotLong === longText, `收到长度=${gotLong.length}/${longText.length}`);
+
+  chatA3.stop();
+  chatB3.stop();
+  storeA3.close();
+  storeB3.close();
   storeA.close();
   storeB.close();
 

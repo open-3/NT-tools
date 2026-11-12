@@ -96,21 +96,22 @@ export class ChatService extends EventEmitter {
 
   private onData(socket: net.Socket, chunk: Buffer): void {
     let buf = Buffer.concat([this.buffers.get(socket) ?? Buffer.alloc(0), chunk]);
-    let hadFrame = false;
     while (buf.length > 0) {
       let parsed: { header: LanHeader; consumed: number } | null;
       try {
         parsed = tryParseHeader(buf);
       } catch {
         socket.destroy();
+        this.buffers.delete(socket);
         return;
       }
       if (!parsed) break;
-      hadFrame = true;
       buf = buf.subarray(parsed.consumed);
       this.dispatch(socket, parsed.header);
     }
-    if (hadFrame) this.buffers.set(socket, buf);
+    // 关键：无论是否解析出完整帧，剩下的部分帧（跨 TCP 包的长消息）都必须
+    // 存回缓冲，否则下一次 data 会从空缓冲重读，导致长消息被静默丢弃。
+    this.buffers.set(socket, buf);
   }
 
   private dispatch(socket: net.Socket, header: LanHeader): void {
