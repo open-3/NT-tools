@@ -369,6 +369,10 @@ body {
   background: var(--done);
   opacity: 0.85;
 }
+.dot.lan {
+  background: #7c5cff;
+  box-shadow: 0 0 7px rgba(124, 92, 255, 0.85);
+}
 
 /*
  * 呼吸效果用 JS 以 ~700ms 周期改 opacity 实现，而不是 CSS @keyframes。

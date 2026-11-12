@@ -203,6 +203,14 @@ export class LanStore {
     return r?.c ?? 0;
   }
 
+  /** 所有对端的未读消息总数（不含广播，广播的 peerId 是空串且无需未读提醒） */
+  getTotalUnread(): number {
+    const r = this.db
+      .prepare("SELECT COUNT(*) AS c FROM messages WHERE dir = 'in' AND read = 0 AND peerId != ''")
+      .get() as { c: number } | undefined;
+    return r?.c ?? 0;
+  }
+
   addTransfer(t: Omit<TransferRow, 'id'>): number {
     const r = this.db
       .prepare(

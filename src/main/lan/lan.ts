@@ -177,6 +177,11 @@ export class LanManager extends EventEmitter {
     return map;
   }
 
+  /** 全部未读消息总数（供浮窗徽章显示，无需 discovery/上线即可读） */
+  getTotalUnread(): number {
+    return this.store.getTotalUnread();
+  }
+
   /** 列出可选网卡（供 UI 下拉） */
   listInterfaces(): NetInterface[] {
     return listInterfaces();

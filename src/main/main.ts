@@ -82,6 +82,12 @@ function collect(): ViewSnapshot {
   const snap = reconcile(sessions, sources, store);
   // 额度用独立定时器算（低频），这里只贴上去，不阻塞列表的 2s 刷新
   if (quotaCache) snap.quota = quotaCache;
+  // 局域网通信未读总数（无需 LAN 服务启动也能读，直接查 lan.db）
+  try {
+    snap.lanUnread = lanManager.getTotalUnread();
+  } catch {
+    snap.lanUnread = 0;
+  }
   store.pruneKeys(new Set(sessions.map((s) => s.key)));
   return snap;
 }

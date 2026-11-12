@@ -39,6 +39,8 @@ export interface ViewSnapshot {
   attention: boolean;
   /** 额度状态（目前只有 Codex 有） */
   quota?: QuotaState;
+  /** 局域网通信未读消息总数（浮窗徽章用，由 main.ts collect 时贴入） */
+  lanUnread?: number;
 }
 
 /**
@@ -119,5 +121,7 @@ export function sameSnapshot(a: ViewSnapshot | null, b: ViewSnapshot): boolean {
   }
   // 额度百分比变了要刷新（告警 pill 的显隐依赖它）
   if (a.quota?.primary.usedPct !== b.quota?.primary.usedPct) return false;
+  // 局域网未读总数变了要刷新（浮窗徽章）
+  if ((a.lanUnread ?? 0) !== (b.lanUnread ?? 0)) return false;
   return true;
 }

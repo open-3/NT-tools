@@ -36,6 +36,8 @@ interface Snapshot {
     plan?: string;
     sampledAt: number;
   };
+  /** 局域网通信未读消息总数（浮窗徽章用） */
+  lanUnread?: number;
 }
 
 declare global {
@@ -151,6 +153,7 @@ function renderMini(snap: Snapshot): string {
   if (c.waiting > 0) parts.push(`<span class="dot wait"></span>${c.waiting} 待确认`);
   if (c.running > 0) parts.push(`<span class="dot run"></span>${c.running} 进行中`);
   if (c.done > 0) parts.push(`<span class="dot done"></span>${c.done} 未读`);
+  if ((snap.lanUnread ?? 0) > 0) parts.push(`<span class="dot lan"></span>${snap.lanUnread} 消息`);
   const label = parts.length ? parts.join('<span class="mini-sep">·</span>') : '暂无进行中的对话';
 
   return `
